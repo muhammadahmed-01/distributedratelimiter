@@ -1,61 +1,57 @@
-# test_ip_and_jwt.ps1
-# Test both IP filter and JWT filter behaviour.
-#  - Phase A: requests WITHOUT JWT (simulate anonymous/attacker traffic)
-#  - Phase B: requests WITH JWT (authenticated)
-# Prints HTTP status, response body and X-RateLimit headers.
-
+# test_ip_jwt_account.ps1
 param()
 
 # === Configuration ===
 $BaseUrl   = "http://localhost:8080/api/hello"   # endpoint to hit
-$Ip        = "203.0.113.10"                     # X-Forwarded-For header value
+$Ip        = "203.0.113.10"                     # X-Forwarded-For header
 $OtherIp   = "198.51.100.25"
-$JwtToken  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwiYWNjb3VudElkIjoiYWNjLTAwMSIsInVzZXJJZCI6InUtMTIzIiwiZXhwIjoxODkzNDU2MDAwfQ.KpCyEp0YVTL-N5xQndD2Q0Z4TLvJaNHU3jQ3T7H-lFA"           # put a valid token for auth phase
-$Limit     = 5                                  # expected ip limit (for readable output)
-$Burst     = 7                                  # how many requests to send in each phase
-$DelayMs   = 300                                # delay between requests
+$JwtToken  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwiYWNjb3VudElkIjoiYWNjLTAwMSIsInVzZXJJZCI6InUtMTIzIiwiZXhwIjoxODkzNDU2MDAwfQ.KpCyEp0YVTL-N5xQndD2Q0Z4TLvJaNHU3jQ3T7H-lFA"                                 # <-- paste valid token here
+$Burst     = 7
+$DelayMs   = 300
+$AccountId = "test-user-123"                    # account for account-level limiter
+
+function Read-ResponseBodySafely($responseObj) {
+    if ($null -eq $responseObj) { return "<no response>" }
+    try { if ($responseObj -and $responseObj.Content) { return $responseObj.Content } } catch {}
+    try {
+        $stream = $responseObj.GetResponseStream()
+        if ($stream -ne $null) {
+            $reader = New-Object System.IO.StreamReader($stream)
+            $body = $reader.ReadToEnd()
+            $reader.Close()
+            return $body
+        }
+    } catch {}
+    return "<could not read body>"
+}
 
 function Send-Request {
     param(
         [string]$url,
         [string]$ipHeader,
-        [string]$jwtToken = $null
+        [string]$jwtToken = $null,
+        [string]$accountId = $null
     )
 
     $headers = @{ "X-Forwarded-For" = $ipHeader }
-    if ($jwtToken -and $jwtToken.Trim() -ne "") {
-        $headers.Add("Authorization", "Bearer $jwtToken")
-    }
+    if ($jwtToken -and $jwtToken.Trim() -ne "") { $headers.Add("Authorization", "Bearer $jwtToken") }
+    if ($accountId -and $accountId.Trim() -ne "") { $headers.Add("X-Account-Id", $accountId) }
 
     try {
         $response = Invoke-WebRequest -Uri $url -Headers $headers -Method GET -ErrorAction Stop
-        # Success
-        $status = $response.StatusCode
-        $body = $response.Content
-        $limitHeader = $response.Headers["X-RateLimit-Limit"]
-        $remainingHeader = $response.Headers["X-RateLimit-Remaining"]
-        $retryAfter = $response.Headers["Retry-After"]
-
+        $body = Read-ResponseBodySafely $response
         return [PSCustomObject]@{
-            Status    = $status
+            Status    = $response.StatusCode
             Body      = $body
-            Limit     = $limitHeader
-            Remaining = $remainingHeader
-            RetryAfter= $retryAfter
+            Headers   = $response.Headers
         }
     } catch {
-        # Failure (4xx/5xx)
         $ex = $_.Exception
         $status = $null
         $body = "<no body>"
-        $limitHeader = $null
-        $remainingHeader = $null
-        $retryAfter = $null
-
+        $hdrs = $null
         if ($ex.Response -ne $null) {
-            try {
-                $status = $ex.Response.StatusCode.value__
-            } catch { $status = $null }
+            try { $status = $ex.Response.StatusCode.value__ } catch {}
             try {
                 $stream = $ex.Response.GetResponseStream()
                 if ($stream -ne $null) {
@@ -63,59 +59,66 @@ function Send-Request {
                     $body = $reader.ReadToEnd()
                     $reader.Close()
                 }
-            } catch {
-                $body = "<failed to read body>"
-            }
-            try { $limitHeader = $ex.Response.Headers["X-RateLimit-Limit"] } catch {}
-            try { $remainingHeader = $ex.Response.Headers["X-RateLimit-Remaining"] } catch {}
-            try { $retryAfter = $ex.Response.Headers["Retry-After"] } catch {}
-        } else {
-            $body = $ex.Message
-        }
-
+            } catch { $body = "<failed to read body>" }
+            try { $hdrs = $ex.Response.Headers } catch {}
+        } else { $body = $ex.Message }
         return [PSCustomObject]@{
             Status    = $status
             Body      = $body
-            Limit     = $limitHeader
-            Remaining = $remainingHeader
-            RetryAfter= $retryAfter
+            Headers   = $hdrs
         }
     }
 }
 
-Write-Host "=== IP+JWT Rate Limit Test ==="
+function Print-Result($i, $tag, $result) {
+    $status = if ($null -eq $result.Status) { "<no-status>" } else { $result.Status }
+    $remaining = "<n/a>"
+    if ($result.Headers -ne $null) {
+        try { $remaining = $result.Headers["X-RateLimit-Remaining"] } catch {}
+    }
+    if ($status -ge 200 -and $status -lt 300) {
+        Write-Host ("{0} #{1} -> Allowed (Status: {2}) Remaining: {3}" -f $tag, $i, $status, $remaining) -ForegroundColor Green
+    } else {
+        Write-Host ("{0} #{1} -> Blocked/Other (Status: {2}) Remaining: {3}" -f $tag, $i, $status, $remaining) -ForegroundColor Red
+        Write-Host ("    Body: {0}" -f $result.Body)
+    }
+}
+
+Write-Host "=== IP + JWT + Account Rate Limit Tester ==="
 Write-Host "Endpoint: $BaseUrl"
-Write-Host "IP: $Ip, Other IP: $OtherIp"
-Write-Host "Burst size: $Burst, Delay: ${DelayMs}ms"
-Write-Host "`n--- PHASE A: Requests WITHOUT JWT (anonymous) ---`n"
+Write-Host "Burst: $Burst, DelayMs: $DelayMs"
+Write-Host ""
 
+# --- Phase A: Anonymous IP-only requests ---
+Write-Host "--- PHASE A: Anonymous (IP-only) ---`n"
 for ($i = 1; $i -le $Burst; $i++) {
-    $result = Send-Request -url $BaseUrl -ipHeader $Ip -jwtToken $null
-    if ($result.Status -eq 200 -or $result.Status -eq 201) {
-        Write-Host ("#{0} -> Allowed (Status: {1}) Remaining: {2}" -f $i, $result.Status, $result.Remaining) -ForegroundColor Green
-    } else {
-        Write-Host ("#{0} -> Blocked/Other (Status: {1}) Response: {2} Remaining: {3}" -f $i, $result.Status, $result.Body, $result.Remaining) -ForegroundColor Red
-    }
+    $r = Send-Request -url $BaseUrl -ipHeader $Ip
+    Print-Result $i "ANON" $r
     Start-Sleep -Milliseconds $DelayMs
 }
 
-Write-Host "`n--- PHASE A: Other IP sanity check (should be independent) ---`n"
-$result = Send-Request -url $BaseUrl -ipHeader $OtherIp -jwtToken $null
-Write-Host ("Other IP -> Status: {0}, Remaining: {1}, Body: {2}" -f $result.Status, $result.Remaining, $result.Body)
-
-Write-Host "`n--- PHASE B: Requests WITH JWT (authenticated) ---`n"
-if ($JwtToken -eq "<PASTE_VALID_JWT_HERE>" -or [string]::IsNullOrWhiteSpace($JwtToken)) {
-    Write-Host "Warning: JwtToken variable is empty or placeholder. Phase B will likely get 401. Paste a valid token into the script to test authenticated flow." -ForegroundColor Yellow
+# --- Phase B: Authenticated requests (IP + JWT) ---
+Write-Host "`n--- PHASE B: Authenticated (IP + JWT) ---`n"
+if ([string]::IsNullOrWhiteSpace($JwtToken)) {
+    Write-Host "Warning: JwtToken is empty. Paste your token into the script variable for authenticated flow." -ForegroundColor Yellow
 }
-
 for ($i = 1; $i -le $Burst; $i++) {
-    $result = Send-Request -url $BaseUrl -ipHeader $Ip -jwtToken $JwtToken
-    if ($result.Status -eq 200 -or $result.Status -eq 201) {
-        Write-Host ("#{0} -> Auth Allowed (Status: {1}) Remaining: {2}" -f $i, $result.Status, $result.Remaining) -ForegroundColor Green
-    } else {
-        Write-Host ("#{0} -> Auth Blocked/Other (Status: {1}) Response: {2} Remaining: {3}" -f $i, $result.Status, $result.Body, $result.Remaining) -ForegroundColor Red
-    }
+    $r = Send-Request -url $BaseUrl -ipHeader $Ip -jwtToken $JwtToken
+    Print-Result $i "AUTH" $r
     Start-Sleep -Milliseconds $DelayMs
 }
 
-Write-Host "`nTest complete."
+# --- Phase C: Authenticated + Account (IP + JWT + Account limiter) ---
+Write-Host "`n--- PHASE C: Authenticated + Account Rate Limit ---`n"
+for ($i = 1; $i -le $Burst + 3; $i++) {  # extra requests to exceed account limit
+    $r = Send-Request -url $BaseUrl -ipHeader $Ip -jwtToken $JwtToken -accountId $AccountId
+    Print-Result $i "ACC" $r
+    Start-Sleep -Milliseconds $DelayMs
+}
+
+# --- Phase C: Other account sanity check ---
+Write-Host "`n--- SANITY: Other Account ---"
+$r = Send-Request -url $BaseUrl -ipHeader $Ip -jwtToken $JwtToken -accountId "other-user"
+Print-Result 1 "OTHER-ACC" $r
+
+Write-Host "`nDone."

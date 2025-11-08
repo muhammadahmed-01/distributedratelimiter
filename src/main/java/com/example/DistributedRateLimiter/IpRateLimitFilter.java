@@ -36,13 +36,25 @@ public class IpRateLimitFilter extends OncePerRequestFilter {
         String ip = extractClientIp(request);
         String key = "ip:" + ip;
 
+        // 🧩 DEBUG 1 — Log IP extraction
+        System.out.println("[IpRateLimitFilter] Incoming request from IP: " + ip);
+
         Long current = redis.opsForValue().increment(key);
-        if (current != null && current == 1L) {
-            // first time — set TTL
-            redis.expire(key, windowSeconds, TimeUnit.SECONDS);
+        if (current != null) {
+            long ttl = redis.getExpire(key, TimeUnit.SECONDS);
+            if (ttl == -1 || ttl <= 0) {
+                redis.expire(key, windowSeconds, TimeUnit.SECONDS);
+                System.out.println("[IpRateLimitFilter] TTL refreshed for key: " + key);
+            }
+            // 🧩 DEBUG 2 — First request, TTL set
+            System.out.println("[IpRateLimitFilter] New key created: " + key + " -> TTL " + windowSeconds + "s");
         }
 
         long remaining = Math.max(0, limit - (current == null ? 0 : current));
+
+        // 🧩 DEBUG 3 — Log Redis counter and limit state
+        System.out.printf("[IpRateLimitFilter] key=%s, current=%d, limit=%d, remaining=%d%n",
+                key, current, limit, remaining);
 
         // Set helpful headers
         response.setHeader("X-RateLimit-Limit", String.valueOf(limit));
@@ -53,6 +65,9 @@ public class IpRateLimitFilter extends OncePerRequestFilter {
             response.setHeader("Retry-After", String.valueOf(windowSeconds));
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.getWriter().write("{\"error\":\"Too many requests\"}");
+
+            // 🧩 DEBUG 4 — Blocked
+            System.out.println("[IpRateLimitFilter] BLOCKED " + ip + " (count=" + current + ")");
             return;
         }
 

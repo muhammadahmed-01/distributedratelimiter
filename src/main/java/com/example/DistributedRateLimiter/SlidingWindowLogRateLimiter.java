@@ -1,5 +1,6 @@
 package com.example.DistributedRateLimiter;
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,7 @@ public class SlidingWindowLogRateLimiter {
         this.rateLimiterScript = rateLimiterScript;
     }
 
+    @CircuitBreaker(name = "rateLimiterRedisCB", fallbackMethod = "fallbackRateLimit")
     public RateLimitResponse checkRateLimit(String accountId, long limit, long windowSeconds) {
         String key = "rate_limit:account:" + accountId;
         long now = Instant.now().getEpochSecond();
@@ -45,5 +47,14 @@ public class SlidingWindowLogRateLimiter {
         // Simple estimation of reset time (improving this is a Phase 3 optimization)
         long resetTime = now + windowSeconds;
         return new RateLimitResponse(allowed, remaining, resetTime);
+    }
+
+    // Fallback method when Redis fails or CircuitBreaker is open
+    public RateLimitResponse fallbackRateLimit(String accountId, long limit, long windowSeconds, Throwable t) {
+        // Log for observability
+        System.err.println("[CB Fallback] Redis unavailable, allowing partial requests for: " + accountId);
+        long partialAllowance = Math.max(1, limit / 2); // allow 50% of limit
+        long now = Instant.now().getEpochSecond();
+        return new RateLimitResponse(true, partialAllowance, now + windowSeconds);
     }
 }

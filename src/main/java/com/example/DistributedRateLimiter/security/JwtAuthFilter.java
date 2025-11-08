@@ -1,11 +1,13 @@
 package com.example.DistributedRateLimiter.security;
 
+import com.example.DistributedRateLimiter.JwtSecretService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -29,9 +31,16 @@ import java.util.Map;
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
-    private final JwtParser jwtParser; // configure with signing key elsewhere
+    private JwtParser jwtParser; // configure with signing key elsewhere
+    private final JwtSecretService secretService;
 
-    public JwtAuthFilter(@Value("${jwt.signingKey}") String signingKey) {
+    public JwtAuthFilter(JwtSecretService secretService) {
+        this.secretService = secretService;
+    }
+
+    @PostConstruct
+    public void init() {
+        String signingKey = secretService.getSigningKey();
         this.jwtParser = Jwts.parser()
                 .setSigningKey(Keys.hmacShaKeyFor(signingKey.getBytes(StandardCharsets.UTF_8)))
                 .build();

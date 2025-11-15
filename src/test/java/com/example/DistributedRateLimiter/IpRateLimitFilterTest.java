@@ -164,6 +164,8 @@ class IpRateLimitFilterTest {
     void whenSecondRequest_thenDoNotSetExpire() throws Exception {
         // GWEEN: This is the second request, so increment returns 2
         when(valueOperations.increment(TEST_KEY)).thenReturn(2L);
+        when(stringRedisTemplate.getExpire(TEST_KEY, TimeUnit.SECONDS))
+                .thenReturn(10L); // it's not the first request so TTL is a positive value
 
         // WHEN: We make the request
         mockMvc.perform(get(DUMMY_API_PATH).with(request -> {
@@ -237,6 +239,9 @@ class IpRateLimitFilterTest {
         when(valueOperations.increment(concurrentKey)).thenAnswer((Answer<Long>) invocation ->
                 redisCounter.incrementAndGet()
         );
+        when(stringRedisTemplate.getExpire(concurrentKey, TimeUnit.SECONDS))
+                .thenReturn(-1L) // first call, no TTL
+                .thenReturn(10L); // subsequent calls, TTL is set
 
         // We use latches to make all threads start at the same moment
         ExecutorService executor = Executors.newFixedThreadPool(concurrentThreads);

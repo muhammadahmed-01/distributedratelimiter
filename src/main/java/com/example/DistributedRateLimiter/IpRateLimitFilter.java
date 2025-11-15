@@ -14,7 +14,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
-@Component
 public class IpRateLimitFilter extends OncePerRequestFilter {
 
     private final StringRedisTemplate redis;

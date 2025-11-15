@@ -1,4 +1,4 @@
-package com.example.DistributedRateLimiter;
+package com.example.DistributedRateLimiter.rateLimit;
 
 public record RateLimitResponse(
         boolean allowed,

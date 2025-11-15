@@ -1,4 +1,4 @@
-package com.example.DistributedRateLimiter;
+package com.example.DistributedRateLimiter.rateLimit;
 
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;

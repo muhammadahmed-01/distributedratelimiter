@@ -25,7 +25,7 @@ public class RedisConfig {
     @Bean
     public DefaultRedisScript<Long> rateLimiterScript() {
         DefaultRedisScript<Long> redisScript = new DefaultRedisScript<>();
-        redisScript.setLocation(new ClassPathResource("rate_limiter.lua"));
+        redisScript.setLocation(new ClassPathResource("com/example/DistributedRateLimiter/rateLimit/lua/rate_limiter.lua"));
         redisScript.setResultType(Long.class);
         return redisScript;
     }

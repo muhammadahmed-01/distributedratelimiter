@@ -1,7 +1,6 @@
 package com.example.DistributedRateLimiter.config;
 
-import com.example.DistributedRateLimiter.IpRateLimitFilter;
-import com.example.DistributedRateLimiter.SlidingWindowLogRateLimiter;
+import com.example.DistributedRateLimiter.filter.IpRateLimitFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;

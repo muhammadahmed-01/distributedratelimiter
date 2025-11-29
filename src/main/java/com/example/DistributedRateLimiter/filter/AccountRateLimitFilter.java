@@ -19,7 +19,7 @@ public class AccountRateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws ServletException, IOException {
-        System.out.println("[AccountRateLimitFilter] Checking rate limit for account");
+//        System.out.println("[AccountRateLimitFilter] Checking rate limit for account");
         String accountId = (String) req.getAttribute("accountId");
         if (accountId == null) {
             chain.doFilter(req, res); // anonymous endpoints may be allowed, or apply IP limits only

@@ -49,7 +49,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        System.out.println("[JwtAuthFilter] Checking for Authorization header");
+//        System.out.println("[JwtAuthFilter] Checking for Authorization header");
         String auth = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (auth == null || !auth.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
@@ -81,8 +81,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.getWriter().write("{\"error\":\"invalid_token\"}");
-        } finally {
-            // don't clear SecurityContext here — let Spring handle lifecycle, but be mindful in async cases
+            System.out.println("[JwtAuthFilter] Invalid JWT: " + e.getMessage());
         }
     }
 }

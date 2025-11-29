@@ -35,24 +35,24 @@ public class IpRateLimitFilter extends OncePerRequestFilter {
         String key = "ip:" + ip;
 
         // 🧩 DEBUG 1 — Log IP extraction
-        System.out.println("[IpRateLimitFilter] Incoming request from IP: " + ip);
+//        System.out.println("[IpRateLimitFilter] Incoming request from IP: " + ip);
 
         Long current = redis.opsForValue().increment(key);
         if (current != null) {
             long ttl = redis.getExpire(key, TimeUnit.SECONDS);
             if (ttl == -1 || ttl <= 0) {
                 redis.expire(key, windowSeconds, TimeUnit.SECONDS);
-                System.out.println("[IpRateLimitFilter] TTL refreshed for key: " + key);
+//                System.out.println("[IpRateLimitFilter] TTL refreshed for key: " + key);
             }
             // 🧩 DEBUG 2 — First request, TTL set
-            System.out.println("[IpRateLimitFilter] New key created: " + key + " -> TTL " + windowSeconds + "s");
+//            System.out.println("[IpRateLimitFilter] New key created: " + key + " -> TTL " + windowSeconds + "s");
         }
 
         long remaining = Math.max(0, limit - (current == null ? 0 : current));
 
         // 🧩 DEBUG 3 — Log Redis counter and limit state
-        System.out.printf("[IpRateLimitFilter] key=%s, current=%d, limit=%d, remaining=%d%n",
-                key, current, limit, remaining);
+//        System.out.printf("[IpRateLimitFilter] key=%s, current=%d, limit=%d, remaining=%d%n",
+//                key, current, limit, remaining);
 
         // Set helpful headers
         response.setHeader("X-RateLimit-Limit", String.valueOf(limit));

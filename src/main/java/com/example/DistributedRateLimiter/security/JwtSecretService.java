@@ -1,4 +1,4 @@
-package com.example.DistributedRateLimiter;
+package com.example.DistributedRateLimiter.security;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

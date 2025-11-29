@@ -1,6 +1,6 @@
-package com.example.DistributedRateLimiter.security;
+package com.example.DistributedRateLimiter.filter;
 
-import com.example.DistributedRateLimiter.JwtSecretService;
+import com.example.DistributedRateLimiter.security.JwtSecretService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.JwtException;
@@ -12,7 +12,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -50,6 +49,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
+//        System.out.println("[JwtAuthFilter] Checking for Authorization header");
         String auth = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (auth == null || !auth.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
@@ -81,8 +81,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.getWriter().write("{\"error\":\"invalid_token\"}");
-        } finally {
-            // don't clear SecurityContext here — let Spring handle lifecycle, but be mindful in async cases
+            System.out.println("[JwtAuthFilter] Invalid JWT: " + e.getMessage());
         }
     }
 }

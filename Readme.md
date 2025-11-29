@@ -86,14 +86,6 @@ resources/
 
 ---
 
-## 🎯 What to highlight in a portfolio demo
-- The filter ordering and how it reduces wasted CPU (show request logs).  
-- The Redis+Lua atomic counter approach and why it prevents race conditions.  
-- The sliding-window log accuracy vs. fixed-window trade-offs.  
-- Where to find the core algorithm (rateLimit/) and the runtime script (resources/rate_limiter.lua).
-
----
-
 ## 📄 More Details
 
 See Design.md for architecture rationale, trade-offs, and domain separation notes.

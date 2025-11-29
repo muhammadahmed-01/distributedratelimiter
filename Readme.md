@@ -1,20 +1,25 @@
 # Rate Limiting & JWT Auth Demo
 
-A clean and minimal Spring Boot setup demonstrating **IP-based rate limiting**, **JWT authentication**, and **account-level rate limiting**, following an 80/20 approach.
+A compact Spring Boot demo showcasing IP-based rate limiting, JWT authentication, and account-level rate limiting using a sliding-window log approach with Redis+Lua for atomic operations. Designed to be easy to read, run, and demonstrate in a portfolio.
 
 ---
 
 ## 🚀 Features
 
-* **IP Rate Limiting** (first line of defense)
-* **JWT Authentication Filter** (parses and validates tokens)
-* **Account Rate Limiting** (applies only after authenticated access)
-* **Proper Filter Ordering** so that expensive work never occurs unnecessarily
-* **Clean logs** for debugging and observability
+- IP Rate Limiting (first line of defense)  
+- JWT Authentication Filter (parses and validates tokens)  
+- Account Rate Limiting (applies after successful auth)  
+- Deterministic Redis+Lua scripts for atomic counters  
+- Clear filter ordering to minimize wasted work
 
 ---
 
-## 🧪 Sample Logs (cleaned)
+## 🧭 How it works (one-liner)
+Requests pass through a cheap IP filter first, then JWT authentication, then account-level rate checks — minimizing work for blocked requests.
+
+---
+
+## 🧪 Sample Logs (illustrative)
 
 ```
 [IpRateLimit] Request from 203.0.113.10
@@ -35,8 +40,6 @@ A clean and minimal Spring Boot setup demonstrating **IP-based rate limiting**, 
 [IpRateLimit] Request from 203.0.113.10
 [IpRateLimit] BLOCKED (count=4/3)
 ```
-
-These logs show exactly when requests are allowed vs blocked, and confirm downstream filters stop executing once IP throttling triggers.
 
 ---
 
@@ -67,25 +70,30 @@ resources/
 
 ---
 
-## ⚙️ Running the Project
+## ⚙️ Quick Start
 
-1. Download redis docker image and run it
-2. Generate a JWT Token using `JwtGen` file or any JWT tool with matching secret key
-3. Run the application
-4. Test this URL: http://localhost:8080/api/hello with curl or Postman
+1. Start Redis (Docker recommended):  
+   `docker run -p 6379:6379 --name redis -d redis:alpine`
+
+2. Build & run the app:  
+   - Using Maven: `mvn spring-boot:run`  
+   - Or build and run the generated jar: `mvn clean package && java -jar target/*.jar`
+
+3. Generate or obtain a JWT (use JwtGen or any JWT tool with the configured secret).
+
+4. Test the demo endpoint:  
+   `curl -H "Authorization: Bearer <token>" http://localhost:8080/api/hello`
 
 ---
 
-## 🧭 Filter Ordering Overview
-
-1. **IpRateLimitFilter** runs first — blocks early.
-2. **JwtAuthFilter** parses token only if IP allowed.
-3. **AccountRateLimitFilter** applies user/account limits.
-
-This ensures optimal performance, security, and predictable behavior.
+## 🎯 What to highlight in a portfolio demo
+- The filter ordering and how it reduces wasted CPU (show request logs).  
+- The Redis+Lua atomic counter approach and why it prevents race conditions.  
+- The sliding-window log accuracy vs. fixed-window trade-offs.  
+- Where to find the core algorithm (rateLimit/) and the runtime script (resources/rate_limiter.lua).
 
 ---
 
 ## 📄 More Details
 
-See `design.md` for architecture and flow diagrams.
+See Design.md for architecture rationale, trade-offs, and domain separation notes.

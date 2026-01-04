@@ -1,6 +1,5 @@
-# Rate Limiting & JWT Auth Demo
-
-A compact Spring Boot demo showcasing IP-based rate limiting, JWT authentication, and account-level rate limiting using a sliding-window log approach with Redis+Lua for atomic operations. Designed to be easy to read, run, and demonstrate in a portfolio.
+# Distributed API Rate Limiter (Spring Boot + Redis)
+This service implements centralized API rate limiting with Redis for consistent enforcement across horizontally scaled instances. It is designed with real-world tradeoffs in mind: atomic counter operations, latency considerations, observability hooks, and graceful degradation under failure.
 
 ---
 

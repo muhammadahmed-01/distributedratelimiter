@@ -1,5 +1,6 @@
-# Distributed API Rate Limiter (Spring Boot + Redis)
-This service implements centralized API rate limiting with Redis for consistent enforcement across horizontally scaled instances. It is designed with real-world tradeoffs in mind: atomic counter operations, latency considerations, observability hooks, and graceful degradation under failure.
+# Distributed Rate Limiter
+
+A spring boot service showcasing IP-based rate limiting, JWT authentication, and account-level rate limiting using a sliding-window log approach with Redis+Lua for atomic operations.
 
 ---
 
@@ -8,12 +9,16 @@ This service implements centralized API rate limiting with Redis for consistent 
 - IP Rate Limiting (first line of defense)  
 - JWT Authentication Filter (parses and validates tokens)  
 - Account Rate Limiting (applies after successful auth)  
-- Deterministic Redis+Lua scripts for atomic counters  
+- Deterministic Redis+Lua scripts for atomic counters (zero race conditions)  
 - Clear filter ordering to minimize wasted work
+- **Prometheus Metrics**: Exported via `/actuator/prometheus` tracking allowed/blocked rates
+- **Correlation IDs**: MDC-powered request tracking via `X-Correlation-Id`
+- **Structured Error Responses**: Standard JSON formats for `401` and `429` status codes
 
 ---
 
 ## 🧭 How it works (one-liner)
+
 Requests pass through a cheap IP filter first, then JWT authentication, then account-level rate checks — minimizing work for blocked requests.
 
 ---
@@ -71,17 +76,50 @@ resources/
 
 ## ⚙️ Quick Start
 
-1. Start Redis (Docker recommended):  
-   `docker run -p 6379:6379 --name redis -d redis:alpine`
+### Option 1: Local Development (Maven)
 
-2. Build & run the app:  
-   - Using Maven: `mvn spring-boot:run`  
-   - Or build and run the generated jar: `mvn clean package && java -jar target/*.jar`
+1. Start Redis: `docker run -p 6379:6379 --name redis -d redis:alpine`
+2. Run the app: `mvn spring-boot:run`
+3. Test endpoint: `curl -H "Authorization: Bearer <token>" http://localhost:8080/api/hello`
 
-3. Generate or obtain a JWT (use JwtGen or any JWT tool with the configured secret).
+### Option 2: Full Observability Stack (Docker Compose)
 
-4. Test the demo endpoint:  
-   `curl -H "Authorization: Bearer <token>" http://localhost:8080/api/hello`
+Spins up Redis, the Spring Boot application, Prometheus, and Grafana in one command:
+
+```bash
+docker compose up -d
+```
+
+- **App**: `http://localhost:8080`
+- **Prometheus**: `http://localhost:9090`
+- **Grafana**: `http://localhost:3000` (The dashboard is pre-provisioned!)
+
+---
+
+## 📈 Observability & Grafana
+
+The application records metric counters for both `allowed` and `blocked` requests, tagged by rate limit `type` (IP or Account) and `status`.
+
+`![Grafana Dashboard](docs/grafana-dashboard.png)`
+
+---
+
+## 🔥 Load Testing with k6
+
+A comprehensive `k6` test suite is provided in the `load-tests/` directory to prove the system works correctly under heavy concurrent load.
+
+It tests four scenarios:
+
+1. **IP Limit**: Valid requests until the limit is exhausted, followed by `429`s.
+2. **JWT Auth**: Rejects invalid tokens with `401 Unauthorized`.
+3. **Account Limit**: Rejects requests that exceed the account's quota.
+4. **Distributed Race Condition Test**: 50 Virtual Users simultaneously bombarding the same account using different spoofed IPs to prove the atomic Lua script perfectly prevents concurrency bugs.
+
+**Run the tests:**
+
+```bash
+k6 run load-tests/rate_limit_test.js
+```
 
 ---
 

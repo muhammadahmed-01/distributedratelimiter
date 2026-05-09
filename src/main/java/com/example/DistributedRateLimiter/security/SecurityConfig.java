@@ -10,6 +10,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest;
 
 @Configuration
 @EnableWebSecurity
@@ -30,16 +31,14 @@ public class SecurityConfig {
         return http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/actuator/**").permitAll() // allow actuator for debugging
-                        .anyRequest().authenticated()
+                        .requestMatchers(EndpointRequest.toAnyEndpoint()).permitAll() // allow all actuator endpoints
+                        .requestMatchers("/actuator/**").permitAll() // fallback for path
+                        .anyRequest().permitAll()
                 )
-//                // 1️⃣ IP limiter runs first
-//                .addFilterBefore(ipRateLimitFilter, BasicAuthenticationFilter.class)
                 // 2️⃣ JWT filter sets SecurityContext / accountId
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 // 3️⃣ Account-level limiter runs after JWT
                 .addFilterAfter(accountRateLimitFilter, JwtAuthFilter.class)
-                .httpBasic(Customizer.withDefaults())
                 .build();
     }
 }

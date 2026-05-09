@@ -1,6 +1,6 @@
 package com.example.DistributedRateLimiter.filter;
 
-import com.example.DistributedRateLimiter.security.JwtSecretService;
+import com.example.DistributedRateLimiter.metrics.RateLimitMetrics;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.JwtException;
@@ -12,6 +12,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -31,15 +33,17 @@ import java.util.Map;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private JwtParser jwtParser; // configure with signing key elsewhere
-    private final JwtSecretService secretService;
+    private final RateLimitMetrics metrics;
 
-    public JwtAuthFilter(JwtSecretService secretService) {
-        this.secretService = secretService;
+    @Value("${jwt.signingKey}")
+    private String signingKey;
+
+    public JwtAuthFilter(RateLimitMetrics metrics) {
+        this.metrics = metrics;
     }
 
     @PostConstruct
     public void init() {
-        String signingKey = secretService.getSigningKey();
         this.jwtParser = Jwts.parser()
                 .setSigningKey(Keys.hmacShaKeyFor(signingKey.getBytes(StandardCharsets.UTF_8)))
                 .build();
@@ -78,9 +82,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             filterChain.doFilter(request, response);
         } catch (JwtException e) {
+            metrics.recordInvalid("jwt");
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.getWriter().write("{\"error\":\"invalid_token\"}");
+            String correlationId = MDC.get(CorrelationIdFilter.CORRELATION_ID_LOG_VAR);
+            response.getWriter().write(String.format("{\"error\":\"invalid_token\", \"correlationId\":\"%s\"}", correlationId));
             System.out.println("[JwtAuthFilter] Invalid JWT: " + e.getMessage());
         }
     }

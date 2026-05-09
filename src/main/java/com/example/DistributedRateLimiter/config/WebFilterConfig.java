@@ -1,28 +1,41 @@
 package com.example.DistributedRateLimiter.config;
 
+import com.example.DistributedRateLimiter.filter.CorrelationIdFilter;
 import com.example.DistributedRateLimiter.filter.IpRateLimitFilter;
+import com.example.DistributedRateLimiter.metrics.RateLimitMetrics;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import com.example.DistributedRateLimiter.rateLimit.SlidingWindowLogRateLimiter;
 
 @Configuration
 public class WebFilterConfig {
 
     @Bean
+    public FilterRegistrationBean<CorrelationIdFilter> correlationIdFilterRegistration() {
+        FilterRegistrationBean<CorrelationIdFilter> reg = new FilterRegistrationBean<>(new CorrelationIdFilter());
+        reg.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        reg.addUrlPatterns("/*");
+        reg.setName("correlationIdFilter");
+        return reg;
+    }
+
+    @Bean
     public FilterRegistrationBean<IpRateLimitFilter> ipRateLimitFilterRegistration(IpRateLimitFilter filter) {
         FilterRegistrationBean<IpRateLimitFilter> reg = new FilterRegistrationBean<>(filter);
-        reg.setOrder(Ordered.HIGHEST_PRECEDENCE); // MUST be here
+        reg.setOrder(Ordered.HIGHEST_PRECEDENCE + 1); // Runs right after CorrelationIdFilter
         reg.addUrlPatterns("/*");
         reg.setName("ipRateLimitFilter");
         return reg;
     }
 
     @Bean
-    public IpRateLimitFilter ipRateLimitFilter(StringRedisTemplate redisTemplate, @Value("${ratelimit.ip.limit:100}") int limit,
+    public IpRateLimitFilter ipRateLimitFilter(SlidingWindowLogRateLimiter rateLimiter,
+                                               RateLimitMetrics metrics,
+                                               @Value("${ratelimit.ip.limit:100}") int limit,
                                                @Value("${ratelimit.ip.windowSeconds:60}") int windowSeconds) {
-        return new IpRateLimitFilter(redisTemplate, limit, windowSeconds);
+        return new IpRateLimitFilter(rateLimiter, metrics, limit, windowSeconds);
     }
 }

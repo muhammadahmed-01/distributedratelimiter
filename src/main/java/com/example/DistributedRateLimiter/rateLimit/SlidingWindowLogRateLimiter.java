@@ -19,8 +19,7 @@ public class SlidingWindowLogRateLimiter {
         this.rateLimiterScript = rateLimiterScript;
     }
 
-    public RateLimitResponse checkRateLimit(String accountId, long limit, long windowSeconds) {
-        String key = "rate_limit:account:" + accountId;
+    public RateLimitResponse checkRateLimit(String key, long limit, long windowSeconds) {
         long now = Instant.now().getEpochSecond();
 
         List<String> keys = List.of(key);

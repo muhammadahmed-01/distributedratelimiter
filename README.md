@@ -100,7 +100,7 @@ docker compose up -d
 
 The application records metric counters for both `allowed` and `blocked` requests, tagged by rate limit `type` (IP or Account) and `status`.
 
-`![Grafana Dashboard](docs/grafana-dashboard.png)`
+![Grafana Dashboard](docs/grafana-dashboard.png)
 
 ---
 

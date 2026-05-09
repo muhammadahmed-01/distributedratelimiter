@@ -87,4 +87,4 @@ resources/
 
 ## 📄 More Details
 
-See Design.md for architecture rationale, trade-offs, and domain separation notes.
+See [Design.md](Design.md) for architecture rationale, trade-offs, and domain separation notes.

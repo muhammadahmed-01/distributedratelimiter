@@ -9,6 +9,8 @@ import org.mockito.stubbing.Answer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -36,12 +38,21 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(excludeAutoConfiguration = SecurityAutoConfiguration.class)
-@ContextConfiguration(classes = {IpRateLimitFilter.class, IpRateLimitFilterTest.DummyController.class})
+@ContextConfiguration(classes = {IpRateLimitFilterTest.TestConfig.class, IpRateLimitFilterTest.DummyController.class})
 @TestPropertySource(properties = {
         "ratelimit.ip.limit=5",
-        "ratelimit.ip.windowSeconds=10"
+        "ratelimit.ip.windowSeconds=10",
+        "ratelimit.trusted-proxies=192.168.1.100"
 })
 class IpRateLimitFilterTest {
+
+    @Configuration
+    static class TestConfig {
+        @Bean
+        IpRateLimitFilter ipRateLimitFilter(SlidingWindowLogRateLimiter rateLimiter, RateLimitMetrics metrics) {
+            return new IpRateLimitFilter(rateLimiter, metrics, 5, 10, "192.168.1.100");
+        }
+    }
 
     @Autowired
     private WebApplicationContext context;
@@ -114,7 +125,7 @@ class IpRateLimitFilterTest {
     }
 
     @Test
-    void whenUsingXForwardedFor_thenParsesCorrectIp() throws Exception {
+    void whenUsingXForwardedForFromTrustedProxy_thenParsesCorrectIp() throws Exception {
         String proxiedIp = "10.0.0.1";
         String proxiedKey = "rate_limit:ip:" + proxiedIp;
 
@@ -130,6 +141,37 @@ class IpRateLimitFilterTest {
                 .andExpect(status().isOk());
 
         verify(rateLimiter, times(1)).checkRateLimit(eq(proxiedKey), anyLong(), anyLong());
+    }
+
+    @Test
+    void whenUsingXForwardedForFromUntrustedClient_thenIgnoresHeader() throws Exception {
+        String untrustedClientIp = "10.0.0.99";
+        String untrustedKey = "rate_limit:ip:" + untrustedClientIp;
+
+        when(rateLimiter.checkRateLimit(eq(untrustedKey), anyLong(), anyLong()))
+                .thenReturn(new RateLimitResponse(true, 4L, 0L));
+
+        mockMvc.perform(get(DUMMY_API_PATH)
+                        .with(request -> {
+                            request.setRemoteAddr(untrustedClientIp);
+                            return request;
+                        })
+                        .header("X-Forwarded-For", "10.0.0.1"))
+                .andExpect(status().isOk());
+
+        verify(rateLimiter, times(1)).checkRateLimit(eq(untrustedKey), anyLong(), anyLong());
+    }
+
+    @Test
+    void whenRedisUnavailableAndFailClosed_thenReturn503() throws Exception {
+        when(rateLimiter.checkRateLimit(any(), anyLong(), anyLong()))
+                .thenReturn(RateLimitResponse.redisUnavailable(false));
+
+        mockMvc.perform(get(DUMMY_API_PATH).with(request -> {
+                    request.setRemoteAddr(TEST_IP);
+                    return request;
+                }))
+                .andExpect(status().isServiceUnavailable());
     }
 
     @Test

@@ -32,6 +32,7 @@ build/
 ### VS Code ###
 .vscode/
 
-mvnw*
-.mvn/*
+.mvn/wrapper/maven-wrapper.jar
 data/
+prometheus.exe
+*.exe

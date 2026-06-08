@@ -43,7 +43,7 @@ export const options = {
 };
 
 const BASE_URL = 'http://localhost:8080/api/hello';
-const JWT_SECRET = 'my-super-secret-signing-key-which-must-be-32-bytes!';
+const JWT_SECRET = __ENV.JWT_SIGNING_KEY || 'my-super-secret-signing-key-which-must-be-32-bytes!';
 
 // Helper: Generate a valid JWT
 function generateJWT(accountId) {

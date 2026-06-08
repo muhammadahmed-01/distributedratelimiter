@@ -146,10 +146,9 @@ This section maps logical domains to the project's folder structure to keep conc
 
 Infra and Spring bean configuration:
 
-- AwsConfig
 - RedisConfig
 - WebFilterConfig
-- JwtConfig
+- SecurityFilterConfig
 
 Purpose: environment wiring, beans, and external integrations. Keeps deployment details out of business logic.
 
@@ -165,6 +164,7 @@ Purpose: HTTP endpoints and request/response shaping only. No rate-limit or secu
 
 Request policing and pipeline guards:
 
+- CorrelationIdFilter
 - IpRateLimitFilter
 - JwtAuthFilter
 - AccountRateLimitFilter
@@ -185,10 +185,25 @@ Purpose: Algorithmic logic for counting and decisions. Framework-agnostic for ea
 Authentication and secrets:
 
 - JwtGen
-- JwtSecretService
 - SecurityConfig
 
 Purpose: JWT creation/verification and related security utilities. Separated from rate-limiting rules.
+
+### metrics/
+
+Observability:
+
+- RateLimitMetrics
+
+Purpose: Micrometer counters and timers for rate-limit decisions and Redis latency.
+
+### util/
+
+Shared helpers:
+
+- JsonErrorWriter
+
+Purpose: Safe JSON serialization for error responses.
 
 ### resources/
 
@@ -242,9 +257,10 @@ stops. Production fix:
 
 - **Redis Sentinel** for automatic failover (primary + 2 replicas)
 - **Redis Cluster** for horizontal sharding if key space becomes large
-- **Fail-open vs fail-closed decision**: current implementation fails open
-  (requests pass through when Redis is down). For security-critical limiting,
-  fail-closed is safer but risks availability. This is a deliberate tradeoff.
+- **Fail-open vs fail-closed decision**: configurable via `ratelimit.redis.failure-policy`.
+  Default is **fail-closed** (`503 Service Unavailable`) because a down Redis means
+  rate limiting is broken. Set `FAIL_OPEN` for availability-first projects where
+  unprotected traffic is acceptable during outages.
 
 ### Sliding Window Log Memory Grows with Traffic
 
@@ -268,15 +284,31 @@ Production fix:
 - Maintain a distributed token blacklist in Redis for revocation
 - This converts per-request cryptographic verification into a Redis lookup
 
-### No Rate Limit Headers in Responses
+### Rate Limit Headers
 
-Production rate limiters return headers so clients can self-throttle:
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 23
-X-RateLimit-Reset: 1714500000
-Retry-After: 37
+The service returns `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`,
+and `Retry-After` on blocked responses. Clients should honor `Retry-After` with
+exponential backoff to avoid retry storms.
 
-This reduces unnecessary retry storms from well-behaved clients.
+### Production Secret Management
+
+JWT signing keys must not be committed to source control. This project loads
+`JWT_SIGNING_KEY` from environment variables (see `.env.example`).
+
+In production, load secrets from a managed store:
+
+- **AWS Secrets Manager** / **Parameter Store**
+- **HashiCorp Vault**
+- **Kubernetes Secrets**
+
+Example pattern (not wired in this project — requires a paid AWS account):
+
+```java
+// SecretsManagerClient client = ...;
+// String key = client.getSecretValue(...).secretString();
+```
+
+The project intentionally uses env vars for portability and zero cloud cost.
 
 ### The Algorithm Tradeoff at Netflix/Stripe Scale
 

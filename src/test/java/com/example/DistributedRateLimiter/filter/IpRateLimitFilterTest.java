@@ -9,6 +9,8 @@ import org.mockito.stubbing.Answer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -36,12 +38,21 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(excludeAutoConfiguration = SecurityAutoConfiguration.class)
-@ContextConfiguration(classes = {IpRateLimitFilter.class, IpRateLimitFilterTest.DummyController.class})
+@ContextConfiguration(classes = {IpRateLimitFilterTest.TestConfig.class, IpRateLimitFilterTest.DummyController.class})
 @TestPropertySource(properties = {
         "ratelimit.ip.limit=5",
-        "ratelimit.ip.windowSeconds=10"
+        "ratelimit.ip.windowSeconds=10",
+        "ratelimit.trusted-proxies=192.168.1.100"
 })
 class IpRateLimitFilterTest {
+
+    @Configuration
+    static class TestConfig {
+        @Bean
+        IpRateLimitFilter ipRateLimitFilter(SlidingWindowLogRateLimiter rateLimiter, RateLimitMetrics metrics) {
+            return new IpRateLimitFilter(rateLimiter, metrics, 5, 10, "192.168.1.100");
+        }
+    }
 
     @Autowired
     private WebApplicationContext context;
@@ -82,7 +93,7 @@ class IpRateLimitFilterTest {
     @Test
     void whenLimitNotExceeded_thenAllowRequestAndSetHeaders() throws Exception {
         long currentRemaining = 3L;
-        when(rateLimiter.checkRateLimit(eq(TEST_KEY), eq((long) TEST_LIMIT), eq((long) TEST_WINDOW_SECONDS)))
+        when(rateLimiter.checkRateLimit(eq(TEST_KEY), eq((long) TEST_LIMIT), eq((long) TEST_WINDOW_SECONDS), eq("ip")))
                 .thenReturn(new RateLimitResponse(true, currentRemaining, 0L));
 
         mockMvc.perform(get(DUMMY_API_PATH).with(request -> {
@@ -98,7 +109,7 @@ class IpRateLimitFilterTest {
 
     @Test
     void whenLimitExceeded_thenReturn429AndSetHeaders() throws Exception {
-        when(rateLimiter.checkRateLimit(eq(TEST_KEY), eq((long) TEST_LIMIT), eq((long) TEST_WINDOW_SECONDS)))
+        when(rateLimiter.checkRateLimit(eq(TEST_KEY), eq((long) TEST_LIMIT), eq((long) TEST_WINDOW_SECONDS), eq("ip")))
                 .thenReturn(new RateLimitResponse(false, 0L, 0L));
 
         mockMvc.perform(get(DUMMY_API_PATH).with(request -> {
@@ -114,11 +125,11 @@ class IpRateLimitFilterTest {
     }
 
     @Test
-    void whenUsingXForwardedFor_thenParsesCorrectIp() throws Exception {
+    void whenUsingXForwardedForFromTrustedProxy_thenParsesCorrectIp() throws Exception {
         String proxiedIp = "10.0.0.1";
         String proxiedKey = "rate_limit:ip:" + proxiedIp;
 
-        when(rateLimiter.checkRateLimit(eq(proxiedKey), anyLong(), anyLong()))
+        when(rateLimiter.checkRateLimit(eq(proxiedKey), anyLong(), anyLong(), eq("ip")))
                 .thenReturn(new RateLimitResponse(true, 4L, 0L));
 
         mockMvc.perform(get(DUMMY_API_PATH)
@@ -129,7 +140,72 @@ class IpRateLimitFilterTest {
                         .header("X-Forwarded-For", "10.0.0.1, 172.21.0.5"))
                 .andExpect(status().isOk());
 
-        verify(rateLimiter, times(1)).checkRateLimit(eq(proxiedKey), anyLong(), anyLong());
+        verify(rateLimiter, times(1)).checkRateLimit(eq(proxiedKey), anyLong(), anyLong(), eq("ip"));
+    }
+
+    @Test
+    void whenUsingXForwardedForFromUntrustedClient_thenIgnoresHeader() throws Exception {
+        String untrustedClientIp = "10.0.0.99";
+        String untrustedKey = "rate_limit:ip:" + untrustedClientIp;
+
+        when(rateLimiter.checkRateLimit(eq(untrustedKey), anyLong(), anyLong(), eq("ip")))
+                .thenReturn(new RateLimitResponse(true, 4L, 0L));
+
+        mockMvc.perform(get(DUMMY_API_PATH)
+                        .with(request -> {
+                            request.setRemoteAddr(untrustedClientIp);
+                            return request;
+                        })
+                        .header("X-Forwarded-For", "10.0.0.1"))
+                .andExpect(status().isOk());
+
+        verify(rateLimiter, times(1)).checkRateLimit(eq(untrustedKey), anyLong(), anyLong(), eq("ip"));
+    }
+
+    @Test
+    void whenActuatorHealth_thenSkipsRateLimit() throws Exception {
+        mockMvc.perform(get("/actuator/health").with(request -> {
+                    request.setRemoteAddr(TEST_IP);
+                    return request;
+                }));
+
+        verify(rateLimiter, never()).checkRateLimit(any(), anyLong(), anyLong(), anyString());
+    }
+
+    @Test
+    void whenActuatorHealthLiveness_thenSkipsRateLimit() throws Exception {
+        mockMvc.perform(get("/actuator/health/liveness").with(request -> {
+                    request.setRemoteAddr(TEST_IP);
+                    return request;
+                }));
+
+        verify(rateLimiter, never()).checkRateLimit(any(), anyLong(), anyLong(), anyString());
+    }
+
+    @Test
+    void whenRedisUnavailableAndFailOpen_thenAllowsRequest() throws Exception {
+        when(rateLimiter.checkRateLimit(any(), anyLong(), anyLong(), eq("ip")))
+                .thenReturn(RateLimitResponse.redisUnavailable(true));
+
+        mockMvc.perform(get(DUMMY_API_PATH).with(request -> {
+                    request.setRemoteAddr(TEST_IP);
+                    return request;
+                }))
+                .andExpect(status().isOk());
+
+        verify(metrics, times(1)).recordAllowed("ip");
+    }
+
+    @Test
+    void whenRedisUnavailableAndFailClosed_thenReturn503() throws Exception {
+        when(rateLimiter.checkRateLimit(any(), anyLong(), anyLong(), eq("ip")))
+                .thenReturn(RateLimitResponse.redisUnavailable(false));
+
+        mockMvc.perform(get(DUMMY_API_PATH).with(request -> {
+                    request.setRemoteAddr(TEST_IP);
+                    return request;
+                }))
+                .andExpect(status().isServiceUnavailable());
     }
 
     @Test
@@ -141,7 +217,7 @@ class IpRateLimitFilterTest {
 
         final AtomicInteger currentCalls = new AtomicInteger(0);
 
-        when(rateLimiter.checkRateLimit(eq(concurrentKey), anyLong(), anyLong())).thenAnswer((Answer<RateLimitResponse>) invocation -> {
+        when(rateLimiter.checkRateLimit(eq(concurrentKey), anyLong(), anyLong(), eq("ip"))).thenAnswer((Answer<RateLimitResponse>) invocation -> {
             int count = currentCalls.incrementAndGet();
             if (count <= TEST_LIMIT) {
                 return new RateLimitResponse(true, TEST_LIMIT - count, 0L);

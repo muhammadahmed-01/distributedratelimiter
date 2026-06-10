@@ -10,6 +10,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 
+/**
+ * Servlet-layer filters run before Spring Security: correlation ID first, then IP limiting.
+ * JWT and account filters are registered in {@link SecurityFilterConfig} instead.
+ */
 @Configuration
 public class WebFilterConfig {
 

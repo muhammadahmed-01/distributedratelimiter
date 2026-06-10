@@ -65,7 +65,7 @@ class SlidingWindowLogRateLimiterRedisTest {
             executor.submit(() -> {
                 try {
                     start.await();
-                    RateLimitResponse response = rateLimiter.checkRateLimit(key, limit, 60);
+                    RateLimitResponse response = rateLimiter.checkRateLimit(key, limit, 60, "ip");
                     if (response.allowed()) {
                         allowed.incrementAndGet();
                     } else {

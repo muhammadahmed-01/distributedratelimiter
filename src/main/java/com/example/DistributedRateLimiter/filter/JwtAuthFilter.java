@@ -61,6 +61,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String userId = claims.get("userId", String.class);
             String subject = claims.getSubject();
 
+            if (accountId == null || accountId.isBlank()) {
+                rejectToken(response, "JWT missing required accountId claim");
+                return;
+            }
+
             List<GrantedAuthority> authorities = Collections.emptyList();
             UsernamePasswordAuthenticationToken authToken =
                     new UsernamePasswordAuthenticationToken(subject, null, authorities);
@@ -73,10 +78,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             log.debug("JWT validated for accountId={}", accountId);
             filterChain.doFilter(request, response);
         } catch (JwtException e) {
-            metrics.recordInvalid("jwt");
-            String correlationId = MDC.get(CorrelationIdFilter.CORRELATION_ID_LOG_VAR);
-            log.warn("Invalid JWT correlationId={}: {}", correlationId, e.getMessage());
-            JsonErrorWriter.writeError(response, HttpStatus.UNAUTHORIZED.value(), "invalid_token", correlationId);
+            rejectToken(response, e.getMessage());
         }
+    }
+
+    private void rejectToken(HttpServletResponse response, String reason) throws IOException {
+        metrics.recordInvalid("jwt");
+        String correlationId = MDC.get(CorrelationIdFilter.CORRELATION_ID_LOG_VAR);
+        log.warn("Invalid JWT correlationId={}: {}", correlationId, reason);
+        JsonErrorWriter.writeError(response, HttpStatus.UNAUTHORIZED.value(), "invalid_token", correlationId);
     }
 }

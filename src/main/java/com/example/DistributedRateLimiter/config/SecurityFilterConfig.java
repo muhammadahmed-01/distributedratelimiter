@@ -8,6 +8,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Security-chain filters only — not auto-registered as servlet filters (avoids double execution).
+ */
 @Configuration
 public class SecurityFilterConfig {
 

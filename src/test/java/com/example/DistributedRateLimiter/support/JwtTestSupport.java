@@ -23,4 +23,14 @@ public final class JwtTestSupport {
                 .signWith(Keys.hmacShaKeyFor(TEST_SIGNING_KEY.getBytes(StandardCharsets.UTF_8)))
                 .compact();
     }
+
+    public static String tokenWithoutAccountId() {
+        return Jwts.builder()
+                .setSubject("user123")
+                .addClaims(Map.of("userId", "u-123"))
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + 3_600_000))
+                .signWith(Keys.hmacShaKeyFor(TEST_SIGNING_KEY.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+    }
 }

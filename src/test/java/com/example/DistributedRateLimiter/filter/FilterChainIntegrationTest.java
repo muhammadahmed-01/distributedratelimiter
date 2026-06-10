@@ -50,9 +50,9 @@ class FilterChainIntegrationTest {
 
     @Test
     void authenticatedRequest_checksAccountLimitExactlyOnce() throws Exception {
-        when(rateLimiter.checkRateLimit(contains("rate_limit:ip:"), anyLong(), anyLong()))
+        when(rateLimiter.checkRateLimit(contains("rate_limit:ip:"), anyLong(), anyLong(), eq("ip")))
                 .thenReturn(new RateLimitResponse(true, 99L, 0L));
-        when(rateLimiter.checkRateLimit(eq("rate_limit:account:acc-001"), anyLong(), anyLong()))
+        when(rateLimiter.checkRateLimit(eq("rate_limit:account:acc-001"), anyLong(), anyLong(), eq("account")))
                 .thenReturn(new RateLimitResponse(true, 9L, 0L));
 
         String token = JwtTestSupport.tokenFor("acc-001", "u-123");
@@ -60,6 +60,6 @@ class FilterChainIntegrationTest {
         mockMvc.perform(get("/api/hello").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
 
-        verify(rateLimiter, times(1)).checkRateLimit(eq("rate_limit:account:acc-001"), anyLong(), anyLong());
+        verify(rateLimiter, times(1)).checkRateLimit(eq("rate_limit:account:acc-001"), anyLong(), anyLong(), eq("account"));
     }
 }

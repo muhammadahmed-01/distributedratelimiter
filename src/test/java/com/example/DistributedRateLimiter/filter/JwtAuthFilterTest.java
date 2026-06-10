@@ -50,6 +50,21 @@ class JwtAuthFilterTest {
     }
 
     @Test
+    void whenTokenMissingAccountId_thenReturns401() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer " + JwtTestSupport.tokenWithoutAccountId());
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("invalid_token");
+        assertThat(request.getAttribute("accountId")).isNull();
+        verify(metrics).recordInvalid("jwt");
+    }
+
+    @Test
     void whenInvalidToken_thenReturns401() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer not-a-valid-jwt");

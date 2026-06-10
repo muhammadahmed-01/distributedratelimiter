@@ -158,22 +158,52 @@ Actuator endpoints: `/actuator/health`, `/actuator/info`, `/actuator/prometheus`
 
 ## Load Testing
 
+**Latest verified results:** [load-tests/K6_RESULTS.md](load-tests/K6_RESULTS.md) (8/8 profiles PASS, 2026-06-10)
+
+### Per-filter tests (isolated)
+
+Flush Redis between tests for clean state (`docker exec distributed-rate-limiter-redis-1 redis-cli FLUSHALL`).
+
 ```bash
-k6 run load-tests/rate_limit_test.js
+k6 run -e JWT_SIGNING_KEY=your-key load-tests/ip_filter_test.js
+k6 run -e JWT_SIGNING_KEY=your-key load-tests/jwt_filter_test.js
+k6 run -e JWT_SIGNING_KEY=your-key load-tests/account_filter_test.js
 ```
 
-With a custom signing key:
+Or run all in sequence (Windows):
 
-```bash
-k6 run -e JWT_SIGNING_KEY=your-key load-tests/rate_limit_test.js
+```powershell
+.\load-tests\run-all-tests.ps1
 ```
 
-Scenarios:
+### Full pipeline (all filters together)
 
-1. **IP limit** — exhausts IP quota, expects `429`
-2. **JWT auth** — valid token (`200`) vs invalid token (`401`)
-3. **Account limit** — exhausts per-account quota across a single IP
-4. **Distributed race** — 50 VUs, unique IPs, shared account; proves Lua atomicity (exactly 10 succeed)
+```bash
+k6 run -e JWT_SIGNING_KEY=your-key load-tests/full_pipeline_test.js
+```
+
+| Script | What it proves |
+|--------|----------------|
+| `ip_filter_test.js` | Anonymous requests; 100/min IP limit → `429 type:ip` |
+| `jwt_filter_test.js` | Anonymous `200`, valid JWT `200`, invalid/missing-claim `401` |
+| `account_filter_test.js` | Same account; 10/min → `429 type:account` |
+| `ip_jwt_combo_test.js` | After IP exhaustion, valid JWT still gets `429 type:ip` |
+| `shared_ip_counter_test.js` | Anonymous + authenticated traffic share one IP bucket |
+| `multi_account_isolation_test.js` | 5 accounts in parallel; independent 10/min quotas, same IP |
+| `health_bypass_test.js` | `/actuator/health` stays `200` when API IP quota is exhausted |
+| `full_pipeline_test.js` | Authenticated burst + 50-VU race through full filter chain |
+| `rate_limit_test.js` | Legacy combined script (all scenarios in one run) |
+
+### Combination tests
+
+```bash
+k6 run -e JWT_SIGNING_KEY=your-key load-tests/ip_jwt_combo_test.js
+k6 run -e JWT_SIGNING_KEY=your-key load-tests/shared_ip_counter_test.js
+k6 run -e JWT_SIGNING_KEY=your-key load-tests/multi_account_isolation_test.js
+k6 run -e JWT_SIGNING_KEY=your-key load-tests/health_bypass_test.js
+```
+
+`run-all-tests.ps1` runs isolated → combination → full pipeline in order with Redis flush between each.
 
 ---
 

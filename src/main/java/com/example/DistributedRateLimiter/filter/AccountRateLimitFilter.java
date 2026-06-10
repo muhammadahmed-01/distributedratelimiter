@@ -15,8 +15,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.concurrent.TimeUnit;
-
 public class AccountRateLimitFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(AccountRateLimitFilter.class);
@@ -45,7 +43,7 @@ public class AccountRateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        RateLimitResponse r = service.checkRateLimit("rate_limit:account:" + accountId, limit, windowSeconds);
+        RateLimitResponse r = service.checkRateLimit("rate_limit:account:" + accountId, limit, windowSeconds, "account");
 
         if (r.redisUnavailable() && !r.allowed()) {
             handleServiceUnavailable(res);
@@ -71,7 +69,7 @@ public class AccountRateLimitFilter extends OncePerRequestFilter {
 
     private void handleServiceUnavailable(HttpServletResponse res) throws IOException {
         String correlationId = MDC.get(CorrelationIdFilter.CORRELATION_ID_LOG_VAR);
-        res.setHeader("Retry-After", String.valueOf(TimeUnit.SECONDS.toSeconds(30)));
+        res.setHeader("Retry-After", "30");
         JsonErrorWriter.writeError(res, HttpStatus.SERVICE_UNAVAILABLE.value(), "rate_limit_unavailable", correlationId);
     }
 }

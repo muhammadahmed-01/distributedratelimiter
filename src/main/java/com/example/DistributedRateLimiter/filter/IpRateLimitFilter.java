@@ -16,7 +16,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.concurrent.TimeUnit;
 
 public class IpRateLimitFilter extends OncePerRequestFilter {
 
@@ -41,13 +40,19 @@ public class IpRateLimitFilter extends OncePerRequestFilter {
     }
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path != null && path.startsWith("/actuator/health");
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         String ip = extractClientIp(request);
         String key = "rate_limit:ip:" + ip;
 
-        RateLimitResponse r = rateLimiter.checkRateLimit(key, limit, windowSeconds);
+        RateLimitResponse r = rateLimiter.checkRateLimit(key, limit, windowSeconds, "ip");
 
         if (r.redisUnavailable() && !r.allowed()) {
             handleServiceUnavailable(response);
@@ -73,7 +78,7 @@ public class IpRateLimitFilter extends OncePerRequestFilter {
 
     private void handleServiceUnavailable(HttpServletResponse response) throws IOException {
         String correlationId = MDC.get(CorrelationIdFilter.CORRELATION_ID_LOG_VAR);
-        response.setHeader("Retry-After", String.valueOf(TimeUnit.SECONDS.toSeconds(30)));
+        response.setHeader("Retry-After", "30");
         JsonErrorWriter.writeError(response, HttpStatus.SERVICE_UNAVAILABLE.value(), "rate_limit_unavailable", correlationId);
     }
 

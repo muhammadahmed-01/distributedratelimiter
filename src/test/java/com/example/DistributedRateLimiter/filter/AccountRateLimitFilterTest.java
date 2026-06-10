@@ -40,7 +40,7 @@ class AccountRateLimitFilterTest {
 
     @Test
     void whenUnderLimit_thenAllowsAndSetsHeaders() throws Exception {
-        when(rateLimiter.checkRateLimit(eq("rate_limit:account:acc-1"), eq(3L), eq(60L)))
+        when(rateLimiter.checkRateLimit(eq("rate_limit:account:acc-1"), eq(3L), eq(60L), eq("account")))
                 .thenReturn(new RateLimitResponse(true, 2L, 1_700_000_000L));
 
         MockHttpServletRequest request = new MockHttpServletRequest();
@@ -57,7 +57,7 @@ class AccountRateLimitFilterTest {
 
     @Test
     void whenOverLimit_thenReturns429() throws Exception {
-        when(rateLimiter.checkRateLimit(anyString(), anyLong(), anyLong()))
+        when(rateLimiter.checkRateLimit(anyString(), anyLong(), anyLong(), eq("account")))
                 .thenReturn(new RateLimitResponse(false, 0L, 0L));
 
         MockHttpServletRequest request = new MockHttpServletRequest();
@@ -73,8 +73,24 @@ class AccountRateLimitFilterTest {
     }
 
     @Test
+    void whenRedisUnavailableAndFailOpen_thenAllowsRequest() throws Exception {
+        when(rateLimiter.checkRateLimit(anyString(), anyLong(), anyLong(), eq("account")))
+                .thenReturn(RateLimitResponse.redisUnavailable(true));
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setAttribute("accountId", "acc-1");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        verify(metrics).recordAllowed("account");
+    }
+
+    @Test
     void whenRedisUnavailable_thenReturns503() throws Exception {
-        when(rateLimiter.checkRateLimit(anyString(), anyLong(), anyLong()))
+        when(rateLimiter.checkRateLimit(anyString(), anyLong(), anyLong(), eq("account")))
                 .thenReturn(RateLimitResponse.redisUnavailable(false));
 
         MockHttpServletRequest request = new MockHttpServletRequest();

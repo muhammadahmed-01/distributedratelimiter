@@ -29,8 +29,8 @@ public class SlidingWindowLogRateLimiter {
         this.failurePolicy = failurePolicy;
     }
 
-    public RateLimitResponse checkRateLimit(String key, long limit, long windowSeconds) {
-        return metrics.recordRedisLatency("rate_limit", () -> doCheckRateLimit(key, limit, windowSeconds));
+    public RateLimitResponse checkRateLimit(String key, long limit, long windowSeconds, String layer) {
+        return metrics.recordRedisLatency(layer, () -> doCheckRateLimit(key, limit, windowSeconds));
     }
 
     private RateLimitResponse doCheckRateLimit(String key, long limit, long windowSeconds) {
@@ -51,7 +51,7 @@ public class SlidingWindowLogRateLimiter {
             }
 
             boolean allowed = requestsAfter != -1;
-            long remaining = allowed ? limit - requestsAfter : 0;
+            long remaining = allowed ? Math.max(0, limit - requestsAfter) : 0;
             long resetTime = now + windowSeconds;
             return new RateLimitResponse(allowed, remaining, resetTime);
         } catch (RedisConnectionFailureException e) {

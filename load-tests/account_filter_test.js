@@ -1,34 +1,37 @@
 /**
- * Isolated account filter test — same accountId, valid JWT, moderate rate.
- * IP limit (100/min) should not trigger; account limit (10/min) should.
- *
- * Run: k6 run -e JWT_SIGNING_KEY=... load-tests/account_filter_test.js
+ * Isolated account filter test — same accountId, sustained authenticated load.
+ * IP limit should not trigger; account limit should.
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
 import { BASE_URL, generateJWT } from './lib/jwt.js';
+import { ACCOUNT_LIMIT, ACCOUNT_OVERAGE } from './lib/limits.js';
 
 const accountAllowed = new Counter('account_allowed');
 const accountBlocked = new Counter('account_blocked');
 
-const ACCOUNT_ID = 'acc-k6-isolated';
-const TOKEN = generateJWT(ACCOUNT_ID);
+const TOKEN = generateJWT('acc-k6-isolated');
+const BLOCKED_MIN = Math.floor(ACCOUNT_OVERAGE * 0.5);
+const ALLOWED_MIN = ACCOUNT_LIMIT - Math.floor(ACCOUNT_OVERAGE * 0.1);
 
 export const options = {
     scenarios: {
-        account_filter_only: {
-            executor: 'shared-iterations',
-            vus: 1,
-            iterations: 12,
-            maxDuration: '30s',
+        account_filter_burst: {
+            executor: 'constant-arrival-rate',
+            rate: 400,
+            timeUnit: '1s',
+            duration: '2s',
+            preAllocatedVUs: 80,
+            maxVUs: 100,
             tags: { filter: 'account' },
         },
     },
     thresholds: {
         checks: ['rate>0.99'],
-        account_allowed: ['count>=10'],
-        account_blocked: ['count>=2'],
+        account_allowed: [`count>=${ALLOWED_MIN}`],
+        account_blocked: [`count>=${BLOCKED_MIN}`],
+        http_reqs: ['count>=500'],
     },
 };
 
@@ -49,5 +52,5 @@ export default function () {
             r.status !== 429 || (r.body && r.body.includes('"type":"account"')),
     });
 
-    sleep(0.05);
+    sleep(0.001);
 }

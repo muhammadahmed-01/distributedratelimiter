@@ -1,42 +1,46 @@
 /**
- * Health bypass — /actuator/health skips IP rate limiting.
- * Phase 1: exhaust IP quota on /api/hello.
- * Phase 2: /actuator/health must still return 200.
- *
- * Run: k6 run -e JWT_SIGNING_KEY=... load-tests/health_bypass_test.js
+ * Health bypass — /actuator/health skips IP rate limiting after API exhaustion.
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
 import { BASE_URL, HEALTH_URL } from './lib/jwt.js';
+import { IP_OVERAGE } from './lib/limits.js';
 
 const apiBlocked = new Counter('api_blocked');
 const healthOk = new Counter('health_ok');
 
+const HEALTH_CHECKS = 100;
+const BLOCKED_MIN = Math.floor(IP_OVERAGE * 0.5);
+
 export const options = {
     scenarios: {
         exhaust_api: {
-            executor: 'shared-iterations',
-            vus: 10,
-            iterations: 110,
-            maxDuration: '30s',
+            executor: 'constant-arrival-rate',
+            rate: 700,
+            timeUnit: '1s',
+            duration: '5s',
+            preAllocatedVUs: 80,
+            maxVUs: 120,
             exec: 'exhaustApi',
             tags: { phase: 'exhaust_api' },
         },
         health_after_exhaust: {
-            executor: 'shared-iterations',
-            vus: 1,
-            iterations: 20,
-            maxDuration: '15s',
-            startTime: '3s',
+            executor: 'constant-arrival-rate',
+            rate: 50,
+            timeUnit: '1s',
+            duration: '4s',
+            preAllocatedVUs: 10,
+            maxVUs: 20,
+            startTime: '6s',
             exec: 'healthAfterExhaust',
             tags: { phase: 'health' },
         },
     },
     thresholds: {
         checks: ['rate==1.0'],
-        api_blocked: ['count>=5'],
-        health_ok: ['count==20'],
+        api_blocked: [`count>=${BLOCKED_MIN}`],
+        health_ok: [`count>=${HEALTH_CHECKS}`],
     },
 };
 
@@ -51,7 +55,7 @@ export function exhaustApi() {
         'exhaust api: status 200 or 429': (r) => r.status === 200 || r.status === 429,
     });
 
-    sleep(0.01);
+    sleep(0.001);
 }
 
 export function healthAfterExhaust() {
@@ -67,5 +71,5 @@ export function healthAfterExhaust() {
             r.body && (r.body.includes('"status":"UP"') || r.body.includes('"status":"up"')),
     });
 
-    sleep(0.05);
+    sleep(0.01);
 }

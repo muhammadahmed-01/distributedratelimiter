@@ -7,6 +7,8 @@ if (-not $JwtKey) {
     $JwtKey = "my-super-secret-signing-key-which-must-be-32-bytes!"
 }
 
+$IpLimit = if ($env:RATELIMIT_IP_LIMIT) { $env:RATELIMIT_IP_LIMIT } else { "2000" }
+$AccountLimit = if ($env:RATELIMIT_ACCOUNT_LIMIT) { $env:RATELIMIT_ACCOUNT_LIMIT } else { "200" }
 $RedisContainer = "distributed-rate-limiter-redis-1"
 
 function Flush-Redis {
@@ -18,7 +20,7 @@ function Run-K6($script, $label) {
     Write-Host "`n========================================" -ForegroundColor Yellow
     Write-Host "  $label" -ForegroundColor Yellow
     Write-Host "========================================" -ForegroundColor Yellow
-    k6 run -e "JWT_SIGNING_KEY=$JwtKey" $script
+    k6 run -e "JWT_SIGNING_KEY=$JwtKey" -e "RATELIMIT_IP_LIMIT=$IpLimit" -e "RATELIMIT_ACCOUNT_LIMIT=$AccountLimit" $script
     if ($LASTEXITCODE -ne 0) { throw "k6 failed: $script" }
 }
 

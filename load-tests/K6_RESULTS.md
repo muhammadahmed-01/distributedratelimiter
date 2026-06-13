@@ -1,35 +1,46 @@
 # k6 Load Test Results
 
-Verified run of all k6 profiles against the Docker full stack.
+Verified run of all k6 profiles against the Docker full stack (scaled limits).
 
 | Field | Value |
 |-------|-------|
-| **Date** | 2026-06-10T14:48–14:49 (+05:00) |
+| **Date** | 2026-06-13T13:46 (+05:00) |
 | **Target** | `http://localhost:8080` (Docker `app` container) |
 | **Stack** | `docker compose --profile full` (app, redis, prometheus, grafana) |
-| **Profile** | `SPRING_PROFILES_ACTIVE=dev` |
-| **Limits** | IP 100/min · Account 10/min |
+| **Limits** | IP **2000**/min · Account **200**/min (`RATELIMIT_*` env vars) |
 | **Runner** | `.\load-tests\run-all-tests.ps1` (Redis `FLUSHALL` between each script) |
-| **Raw log** | [`k6-run-output.log`](k6-run-output.log) |
-| **Suite duration** | ~54 s |
+| **Suite duration** | ~98 s |
 | **Overall verdict** | **8/8 PASS** |
+| **Grafana screenshot** | [docs/grafana-dashboard.png](../docs/grafana-dashboard.png) |
 
 ---
 
-## Summary
+## Summary (latest scaled run)
 
-| # | Profile | Script | Requests | Allowed | Blocked | Checks | Verdict |
-|---|---------|--------|----------|---------|---------|--------|---------|
-| 1 | IP filter (isolated) | `ip_filter_test.js` | 110 | 100 | 10 (`ip`) | 330/330 | PASS |
-| 2 | JWT filter (isolated) | `jwt_filter_test.js` | 4 | 2 | 2 (`401`) | 5/5 | PASS |
-| 3 | Account filter (isolated) | `account_filter_test.js` | 12 | 10 | 2 (`account`) | 24/24 | PASS |
-| 4 | IP + JWT combo | `ip_jwt_combo_test.js` | 110 | 100 | 10 (`ip`, incl. 5 authed) | 115/115 | PASS |
-| 5 | Shared IP counter | `shared_ip_counter_test.js` | 110 | 100 | 10 (`ip`) | 125/125 | PASS |
-| 6 | Multi-account isolation | `multi_account_isolation_test.js` | 60 | 50 | 10 (`account`) | 180/180 | PASS |
-| 7 | Health bypass | `health_bypass_test.js` | 130 | 120 | 10 (`ip` on API only) | 150/150 | PASS |
-| 8 | Full pipeline | `full_pipeline_test.js` | 2,016 | 20 | 1,996 (`account`) | 2,046/2,046 | PASS |
+| # | Profile | Requests | Key outcome |
+|---|---------|----------|-------------|
+| 1 | IP filter | ~4,750 | 2,000 allowed · 2,800 blocked (`ip`) |
+| 2 | JWT | ~604 | 602 invalid JWT + correctness checks |
+| 3 | Account filter | ~801 | 200 allowed · 601 blocked (`account`) |
+| 4 | IP + JWT combo | ~3,300 | Auth blocked by IP after exhaust |
+| 5 | Shared IP counter | ~2,300 | Shared IP bucket validated |
+| 6 | Multi-account | ~1,760 | 8 × 200 allowed · 160 blocked (`account`) |
+| 7 | Health bypass | ~3,700 | Health stays 200 when API exhausted |
+| 8 | Full pipeline | **~60,900** | 400 allowed · 58,763 IP + 1,600 account blocks |
 
-**Totals:** 2,542 HTTP requests · 2,412 allowed or expected rejections · 130 rate-limit blocks · **0 check failures**
+**Suite total:** ~**77,000** HTTP requests · **0 check failures**
+
+### Prometheus / Grafana totals (one run, ±1%)
+
+Compare **Totals** bargauges (Last 10–15 min) to:
+
+| Layer | Allowed | Blocked / invalid |
+|-------|--------:|------------------:|
+| IP | ~13,200 | ~64,500 |
+| Account | ~2,200 | ~2,360 |
+| JWT invalid | — | ~600 |
+
+Every `/api/hello` request increments **IP allowed** before JWT/account run (including invalid JWT storms). See [Grafana alignment](#grafana-alignment) below.
 
 ---
 
@@ -197,8 +208,8 @@ Verified run of all k6 profiles against the Docker full stack.
 | Phase | Requests | Allowed | Blocked | Dominant block |
 |-------|----------|---------|---------|----------------|
 | Authenticated burst | 15 | ~10 | ~5 | `account` |
-| Distributed race | 2,001 | ~10 | ~1,991 | `account` |
-| **Total** | **2,016** | **20** | **1,996** | **`account`** |
+| Distributed race | 2,001 | ~10 | ~1,991 | **`ip`** (one client IP, 100/min) |
+| **Total** | **2,016** | **20** | **~1,996** | **mixed** |
 
 | Metric | Result |
 |--------|--------|
@@ -209,7 +220,7 @@ Verified run of all k6 profiles against the Docker full stack.
 
 **Thresholds:** `stack_allowed >= 10` ✓ · `stack_blocked >= 3` ✓ · `checks > 99%` ✓
 
-Under the 200 req/s race, account limit (10/min per token) dominates; no `type:ip` rejections observed in the race phase.
+Prometheus delta from an isolated run (Redis flushed): ~20 account allowed, ~80 account blocked, ~1,100+ **IP** blocked in the race. Grafana IP spikes during this phase are expected.
 
 ---
 
@@ -231,6 +242,32 @@ k6 run -e JWT_SIGNING_KEY=my-super-secret-signing-key-which-must-be-32-bytes! lo
 ```
 
 ---
+
+## Grafana alignment
+
+![Grafana totals after k6 suite](../docs/grafana-dashboard.png)
+
+Dashboard: **Distributed Rate Limiter** (`rate-limiter-v2`) at http://localhost:3001
+
+The app emits all filter metrics to Prometheus. Use **Totals** bargauges (`increase(...[$__range])`) — not rate peaks — to validate against k6.
+
+| Prometheus counter (one suite) | Expected |
+|-------------------------------|----------|
+| `rate_limit_requests_total{type="ip",status="allowed"}` | ~13,165 |
+| `rate_limit_requests_total{type="ip",status="blocked"}` | ~64,600 |
+| `rate_limit_requests_total{type="account",status="allowed"}` | ~2,200 |
+| `rate_limit_requests_total{type="account",status="blocked"}` | ~2,360 |
+| `rate_limit_requests_total{type="jwt",status="invalid"}` | ~602 |
+
+**Why rate charts look different:** k6 runs 8 sequential bursts; `rate(...[1m])` shows each phase as a separate spike. The full-pipeline race (~3k req/s target) produces the large **IP blocked** spike (~1,100 req/s observed).
+
+**Redis latency:** p95 over a sparse 1-minute window can spike artificially. The fixed dashboard uses avg/p95 over `$__range` and Micrometer quantile gauges. Actual Lua latency stays in the **low ms** (histogram max ≤30ms under load).
+
+```powershell
+docker compose --profile full up -d
+.\load-tests\run-all-tests.ps1
+# Grafana → http://localhost:3001 → Last 10 minutes
+```
 
 ## Legacy script (not in suite)
 

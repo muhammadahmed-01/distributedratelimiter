@@ -90,7 +90,7 @@ docker compose --profile full up -d
 |---------|-----|
 | App | http://localhost:8080 |
 | Prometheus | http://localhost:9090 |
-| Grafana | http://localhost:3000 (dashboard auto-provisioned) |
+| Grafana | http://localhost:3001 (dashboard `rate-limiter-v2`, auto-provisioned) |
 
 ---
 
@@ -133,9 +133,9 @@ Returns a greeting string.
 |--------------------|---------|-------------|
 | `REDIS_HOST` | `localhost` | Redis hostname |
 | `JWT_SIGNING_KEY` | *(required in prod)* | HS256 signing key (min 32 chars) |
-| `ratelimit.ip.limit` | `100` | Max requests per IP per window |
+| `ratelimit.ip.limit` | `2000` | Max requests per IP per window (`RATELIMIT_IP_LIMIT`) |
 | `ratelimit.ip.windowSeconds` | `60` | IP window size (seconds) |
-| `ratelimit.account.limit` | `10` | Max requests per account per window |
+| `ratelimit.account.limit` | `200` | Max requests per account per window (`RATELIMIT_ACCOUNT_LIMIT`) |
 | `ratelimit.account.windowSeconds` | `60` | Account window size (seconds) |
 | `ratelimit.redis.failure-policy` | `FAIL_CLOSED` | `FAIL_CLOSED` (503) or `FAIL_OPEN` (allow) |
 | `ratelimit.trusted-proxies` | *(empty)* | Comma-separated proxy IPs allowed to set `X-Forwarded-For` |
@@ -149,16 +149,36 @@ Metrics are exposed at `/actuator/prometheus`.
 | Metric | Labels | Description |
 |--------|--------|-------------|
 | `rate_limit_requests_total` | `type`, `status` | Allowed/blocked/invalid decisions (`type`: ip, account, jwt) |
-| `rate_limit_redis_latency_seconds` | `type` | Redis Lua script execution latency |
+| `rate_limit_redis_latency_seconds` | `type`, `quantile` | Redis Lua latency (histogram + p95/p99 gauges) |
 | `rate_limit_redis_errors_total` | — | Redis failures during rate limit checks |
 
 Actuator endpoints: `/actuator/health`, `/actuator/info`, `/actuator/prometheus` (restricted in `prod` profile).
+
+### Grafana dashboard
+
+After `docker compose --profile full up -d`, open **http://localhost:3001** and select the **Distributed Rate Limiter** dashboard (`rate-limiter-v2`).
+
+1. Run the k6 suite: `.\load-tests\run-all-tests.ps1`
+2. Set time range to **Last 10–15 minutes**
+3. Compare **Totals** bargauges to k6 counters (see [load-tests/K6_RESULTS.md](load-tests/K6_RESULTS.md))
+
+Use **Totals** panels for validation — they use `increase(...[$__range])` and match k6/Prometheus counts. Rate panels show req/s per minute bucket; brief k6 bursts appear as separate spikes per filter layer.
+
+![Grafana dashboard after k6 suite — totals align with Prometheus counters](docs/grafana-dashboard.png)
+
+Expected totals for one suite run (limits **2000 IP / 200 account** per minute):
+
+| Layer | Allowed | Blocked / invalid |
+|-------|--------:|------------------:|
+| IP | ~13,200 | ~64,500 |
+| Account | ~2,200 | ~2,360 |
+| JWT invalid | — | ~600 |
 
 ---
 
 ## Load Testing
 
-**Latest verified results:** [load-tests/K6_RESULTS.md](load-tests/K6_RESULTS.md) (8/8 profiles PASS, 2026-06-10)
+**Latest verified results:** [load-tests/K6_RESULTS.md](load-tests/K6_RESULTS.md) (8/8 profiles PASS, scaled limits 2000/200)
 
 ### Per-filter tests (isolated)
 
@@ -184,14 +204,14 @@ k6 run -e JWT_SIGNING_KEY=your-key load-tests/full_pipeline_test.js
 
 | Script | What it proves |
 |--------|----------------|
-| `ip_filter_test.js` | Anonymous requests; 100/min IP limit → `429 type:ip` |
-| `jwt_filter_test.js` | Anonymous `200`, valid JWT `200`, invalid/missing-claim `401` |
-| `account_filter_test.js` | Same account; 10/min → `429 type:account` |
+| `ip_filter_test.js` | 800 req/s burst (~4.8k); IP limit → `429 type:ip` |
+| `jwt_filter_test.js` | Correctness + 200 req/s invalid-token storm |
+| `account_filter_test.js` | 400 req/s burst (~800); account limit → `429 type:account` |
 | `ip_jwt_combo_test.js` | After IP exhaustion, valid JWT still gets `429 type:ip` |
 | `shared_ip_counter_test.js` | Anonymous + authenticated traffic share one IP bucket |
-| `multi_account_isolation_test.js` | 5 accounts in parallel; independent 10/min quotas, same IP |
+| `multi_account_isolation_test.js` | 8 accounts in parallel; independent quotas, same IP |
+| `full_pipeline_test.js` | 300 req/s burst + 3000 req/s × 20s race (~60k requests) |
 | `health_bypass_test.js` | `/actuator/health` stays `200` when API IP quota is exhausted |
-| `full_pipeline_test.js` | Authenticated burst + 50-VU race through full filter chain |
 | `rate_limit_test.js` | Legacy combined script (all scenarios in one run) |
 
 ### Combination tests

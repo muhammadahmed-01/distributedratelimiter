@@ -12,7 +12,7 @@
 	<artifactId>DistributedRateLimiter</artifactId>
 	<version>1.0.0</version>
 	<name>Distributed-Rate-Limiter</name>
-	<description>Distributed rate limiter with Redis+Lua sliding window log, tiered IP/JWT/account filters, and Prometheus metrics</description>
+	<description>Production-grade API rate limiting: tiered IP/JWT/account defense, atomic Redis+Lua sliding windows, Prometheus/Grafana observability, and a verified k6 load-test suite.</description>
 	<url>https://github.com/muhammadahmed-01/DistributedRateLimiter</url>
 	<licenses>
 		<license>

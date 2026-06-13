@@ -5,11 +5,51 @@
 ![Spring Boot 3.5](https://img.shields.io/badge/Spring%20Boot-3.5-green)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-A Spring Boot service demonstrating **tiered rate limiting** (IP → JWT → account) using a **sliding-window log** algorithm executed atomically in **Redis via Lua**. Includes Prometheus metrics, Grafana dashboards, and k6 load tests.
+**Protect your API before abuse becomes an outage.**
+
+This is a production-minded Spring Boot service that stops scrapers, credential-stuffing bursts, and runaway clients *before* they reach your business logic — using tiered limits (IP → JWT → account), atomic Redis+Lua sliding windows, and an observability stack you can actually trust.
+
+> One abusive IP shouldn't decide your uptime. One compromised account shouldn't drain your Redis budget. This project shows how to say *no* early, *fairly*, and *measurably*.
 
 ---
 
-## Architecture
+## Why this exists
+
+Every public API eventually faces the same moment: traffic spikes, bots show up, and someone asks *"Are we protected?"*
+
+Most rate-limiter demos stop at a counter in memory. That breaks the second you add a second instance — or the first time someone exploits a window boundary.
+
+This project answers a harder question: **how do you enforce fair, distributed limits under real concurrency, with metrics that prove it?**
+
+| What keeps teams up at night | What this project demonstrates |
+|------------------------------|--------------------------------|
+| Bots hammering endpoints | IP layer blocks cheaply, before JWT parsing |
+| Stolen tokens used at scale | Per-account quotas after verified identity |
+| Race conditions under load | Atomic sliding-window log in Redis via Lua |
+| "Did the limiter actually work?" | Prometheus + Grafana + 77k-request k6 suite |
+| Redis goes down — now what? | Configurable fail-closed vs fail-open policy |
+
+**Bottom line:** honest users get through. Abusive traffic gets stopped. You get numbers to show in a review.
+
+---
+
+## Proof, not promises
+
+These results are from a verified local run — not theoretical limits on a slide deck.
+
+| Signal | Result |
+|--------|--------|
+| Load test suite | **8/8 profiles PASS** |
+| Requests exercised | **~77,000** across isolated, combo, and full-pipeline scenarios |
+| Full-pipeline burst | 3,000 req/s × 20s — limits hold, counters reconcile |
+| Observability | Grafana Totals match Prometheus and k6 (±1%) |
+| CI | Unit, integration, and Testcontainers tests on every push |
+
+Full breakdown: [load-tests/K6_RESULTS.md](load-tests/K6_RESULTS.md) · Live dashboard screenshot: [docs/grafana-dashboard.png](docs/grafana-dashboard.png)
+
+---
+
+## How it works
 
 ```mermaid
 flowchart LR
@@ -22,39 +62,35 @@ flowchart LR
     ACC --> Redis
 ```
 
-Requests pass through cheap checks first: IP limiting before JWT parsing, JWT validation before account quotas. Blocked requests short-circuit early to minimize wasted work.
+Think of it as **three checkpoints on the way in:**
 
-See [Design.md](Design.md) for algorithm comparison, trade-offs, and scaling notes.
+1. **IP** — Stop the flood before you spend CPU on auth.
+2. **JWT** — Reject bad tokens with a clear `401`.
+3. **Account** — Enforce fair per-user quotas once identity is known.
 
----
+Blocked requests exit early. No wasted downstream work. Every decision is counted and visible in Grafana.
 
-## Features
-
-- **IP rate limiting** — first line of defense (configurable limit/window)
-- **JWT authentication** — optional Bearer token parsing; invalid tokens return `401`
-- **Account rate limiting** — per-account quotas after successful auth
-- **Atomic Redis+Lua** — sliding-window log with zero race conditions under concurrency
-- **Prometheus metrics** — allowed/blocked/invalid counters + Redis latency histogram
-- **Correlation IDs** — `X-Correlation-Id` header with MDC logging
-- **Structured JSON errors** — consistent `401`, `429`, and `503` response bodies
-- **Configurable Redis failure policy** — fail-closed (default) or fail-open
+Deep dive on algorithms, trade-offs, and scaling paths: [Design.md](Design.md)
 
 ---
 
-## Prerequisites
+## What you get out of the box
 
-| Tool | Version |
-|------|---------|
-| Java | 21 |
-| Maven | 3.9+ |
-| Docker | 24+ (for Redis / full stack) |
-| k6 | optional, for load tests |
+| Capability | Why it matters |
+|------------|----------------|
+| **Sliding-window log (Redis + Lua)** | No double-counting at window edges — the exploit fixed-window counters miss |
+| **Tiered filter chain** | Cheapest checks first; expensive JWT parsing only when traffic deserves it |
+| **Prometheus + Grafana** | See allowed, blocked, and invalid traffic — and Redis latency — in one dashboard |
+| **k6 test suite** | Eight scenarios from isolated filters to a 60k-request pipeline race |
+| **Structured JSON errors** | Clients get predictable `401`, `429`, and `503` bodies with standard rate-limit headers |
+| **Correlation IDs** | Trace a request from edge to log line when something looks wrong |
+| **Fail-closed by default** | If Redis is unavailable, traffic stops rather than running unprotected |
 
 ---
 
-## Quick Start
+## Try it in five minutes
 
-### 1. Redis only (local development)
+### 1. Spin up Redis (local dev)
 
 ```bash
 docker compose --profile dev up -d
@@ -74,13 +110,15 @@ mvn -q exec:java -Dexec.mainClass=com.example.DistributedRateLimiter.security.Jw
 
 Uses `JWT_SIGNING_KEY` from the environment, or the dev default when `spring.profiles.active=dev`.
 
-### 3. Test the endpoint
+### 3. Hit the API
 
 ```bash
 curl -H "Authorization: Bearer <token>" http://localhost:8080/api/hello
 ```
 
-### 4. Full observability stack
+Watch the rate-limit headers on the response — your client knows exactly where it stands.
+
+### 4. Full stack with dashboards
 
 ```bash
 docker compose --profile full up -d
@@ -92,13 +130,26 @@ docker compose --profile full up -d
 | Prometheus | http://localhost:9090 |
 | Grafana | http://localhost:3001 (dashboard `rate-limiter-v2`, auto-provisioned) |
 
+Run `.\load-tests\run-all-tests.ps1`, open Grafana, set **Last 10–15 minutes**, and watch the Totals panels fill in.
+
+---
+
+## Prerequisites
+
+| Tool | Version |
+|------|---------|
+| Java | 21 |
+| Maven | 3.9+ |
+| Docker | 24+ (for Redis / full stack) |
+| k6 | optional, for load tests |
+
 ---
 
 ## API Reference
 
 ### `GET /api/hello`
 
-Returns a greeting string.
+Returns a greeting string — the demo endpoint behind the full filter chain.
 
 **Request headers**
 
@@ -144,7 +195,7 @@ Returns a greeting string.
 
 ## Observability
 
-Metrics are exposed at `/actuator/prometheus`.
+Every allow, block, and invalid-token decision is exported to Prometheus at `/actuator/prometheus`.
 
 | Metric | Labels | Description |
 |--------|--------|-------------|
@@ -176,7 +227,9 @@ Expected totals for one suite run (limits **2000 IP / 200 account** per minute):
 
 ---
 
-## Load Testing
+## Load testing
+
+Don't take my word for it — break it yourself.
 
 **Latest verified results:** [load-tests/K6_RESULTS.md](load-tests/K6_RESULTS.md) (8/8 profiles PASS, scaled limits 2000/200)
 
@@ -227,7 +280,7 @@ k6 run -e JWT_SIGNING_KEY=your-key load-tests/health_bypass_test.js
 
 ---
 
-## Project Structure
+## Project structure
 
 ```
 src/main/java/com/example/DistributedRateLimiter/
@@ -262,15 +315,15 @@ grafana/             Dashboard + provisioning
 
 ---
 
-## Architecture Details
+## Architecture details
 
-See [Design.md](Design.md) for:
+[Design.md](Design.md) covers the engineering decisions recruiters and architects actually ask about:
 
-- Rate limiting algorithm comparison table
-- Why Redis + Lua for atomicity
-- Filter ordering rationale
-- Production scaling recommendations (Redis Sentinel, sliding-window counter, etc.)
-- Secret management patterns (env vars vs AWS Secrets Manager / Vault)
+- Why sliding-window log over fixed window or token bucket
+- How Redis + Lua eliminates race conditions
+- Filter ordering and cost trade-offs
+- What changes at Netflix/Stripe scale (Sentinel, sliding-window counter, edge proxies)
+- Secret management patterns without locking you into one cloud vendor
 
 ---
 

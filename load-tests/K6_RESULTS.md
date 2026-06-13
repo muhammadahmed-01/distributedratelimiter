@@ -1,5 +1,7 @@
 # k6 Load Test Results
 
+**This is the evidence behind the README claims.** Every profile below was run against the live Docker stack — not mocked Redis, not unit-test stubs. If you're evaluating this project, start here: numbers you can reproduce in under two minutes with `.\load-tests\run-all-tests.ps1`.
+
 Verified run of all k6 profiles against the Docker full stack (scaled limits).
 
 | Field | Value |

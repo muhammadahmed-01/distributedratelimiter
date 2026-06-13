@@ -1,15 +1,34 @@
-# Distributed Rate Limiter – DESIGN.md
+# Distributed Rate Limiter – Design Document
 
-## 1. Architectural Philosophy
-
-The system follows a tiered‑defense model: IP → JWT Authentication → Account → Business Logic.  
-Each layer is intentionally simple, fast, and independent so cheaper checks run first and protect more expensive work downstream.
-
-This mirrors traditional, time‑tested security architecture: guard the gate before you guard the treasury.
+> **For reviewers:** This is the "why behind the how." The README shows what runs and what was tested; this document explains the trade-offs you'd discuss in a system design interview or architecture review.
 
 ---
 
-## 2. Rate Limiting Algorithm Comparison
+## 1. Architectural philosophy
+
+**The goal isn't to block traffic — it's to protect the system while keeping legitimate users moving.**
+
+Every request hits three checkpoints before business logic:
+
+**IP → JWT → Account → Controller**
+
+Each layer is deliberately small, fast, and independent. Cheap checks run first so you never parse a JWT for traffic you've already decided to reject. Expensive identity work only happens when the request has earned it.
+
+This is the same instinct behind physical security: **guard the gate before you guard the treasury.** A scraper shouldn't consume your auth pipeline. A stolen token shouldn't get unlimited retries because you only rate-limited by IP.
+
+The tiered model also maps cleanly to how teams operate:
+
+- **Ops** cares about IP floods and Redis health.
+- **Security** cares about token validity and abuse patterns.
+- **Product** cares that paying users aren't throttled because someone else shared their NAT.
+
+One pipeline, three audiences, one set of metrics to reconcile.
+
+---
+
+## 2. Rate limiting algorithm comparison
+
+Choosing an algorithm is choosing what you're willing to get wrong. Fixed windows are easy until someone sends 2× traffic at the boundary. Token buckets are forgiving until you need hard caps. This project picked **sliding-window log** because correctness at the limit matters more than saving a few Redis bytes on a security boundary.
 
 | Algorithm                  | Accuracy | Memory-Efficiency | Burst Handling              | Complexity | Best For                                      |
 |----------------------------|----------|-------------------|-----------------------------|------------|-----------------------------------------------|
@@ -27,17 +46,11 @@ layer where correctness beats memory efficiency.
 
 ---
 
-## 3. Why Use Redis + Lua Scripts?
+## 3. Why Redis + Lua?
 
-### ⚡ Atomicity & Speed
+**The hard part of rate limiting isn't counting — it's counting correctly when 3,000 requests arrive in the same second from three app instances.**
 
-Redis by itself is fast, but the moment you need:
-
-- read → modify → write  
-- with guaranteed **atomic** behavior  
-- at **scale**  
-
-…then Lua is the old-school warrior you want guarding your gates.
+Redis alone gives you speed. Lua inside Redis gives you **atomicity**: read, decide, and write as one indivisible step. No race where two pods both think there's one slot left.
 
 ### Benefits of Lua in Redis
 
@@ -217,16 +230,18 @@ This structure matches the README and emphasizes separation of concerns: configu
 
 ---
 
-## 8. Trade-Offs Summary
+## 8. Trade-offs summary
 
-### What We Optimized For
+No architecture is free. This one optimizes for **correctness under burst** and **operational clarity** — the things that matter when someone is paging you at 2 a.m.
+
+### What we optimized for
 
 - Production resilience under bursts.
 - Operational simplicity.
 - Clear debugging signals.
 - Ability to scale horizontally.
 
-### What We Sacrificed
+### What we sacrificed
 
 - Some memory overhead from SWL.
 - Slight complexity in Lua scripts.
@@ -236,17 +251,22 @@ This structure matches the README and emphasizes separation of concerns: configu
 
 ---
 
-## 9. Final Verdict
+## 9. Final verdict
 
-The architecture follows a conservative, time-tested philosophy:  
+If you remember one sentence from this document:
+
 **Fail fast, fail cheap, fail early.**
 
-The tiered approach ensures:
+That's not pessimism — it's respect for your downstream services and your on-call engineer. Every millisecond spent on a request you've already decided to block is a millisecond stolen from a real user.
 
-- Minimal load on downstream services  
-- Strong protection against noisy neighbors  
-- Fair usage for honest users  
-- Extensibility for future rate‑limit types
+What this architecture buys you:
+
+- **Predictable load** on controllers and databases  
+- **Protection from noisy neighbors** without manual firewall rules  
+- **Fair quotas** once identity is established  
+- **Room to grow** — add tenant-level or endpoint-level limits without rewriting the pipeline  
+
+It's conservative on purpose. Production systems rarely fail because someone chose the clever algorithm. They fail because nobody agreed on what "limited" means under concurrency.
 
 ## 10. What I'd Do Differently at Scale
 

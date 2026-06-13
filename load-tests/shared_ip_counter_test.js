@@ -1,46 +1,51 @@
 /**
- * IP counter is shared — anonymous and authenticated requests count toward the same IP bucket.
- * Phase 1: 95 anonymous requests.
- * Phase 2: 15 authenticated requests → only ~5 should pass; rest blocked as type=ip.
- *
- * Run: k6 run -e JWT_SIGNING_KEY=... load-tests/shared_ip_counter_test.js
+ * Shared IP counter — anonymous then authenticated traffic uses one IP bucket.
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
 import { BASE_URL, generateJWT } from './lib/jwt.js';
+import { IP_LIMIT } from './lib/limits.js';
 
 const anonAllowed = new Counter('anon_allowed');
 const authAllowed = new Counter('auth_allowed');
 const authIpBlocked = new Counter('auth_ip_blocked');
 
 const TOKEN = generateJWT('acc-shared-ip');
+const ANON_SEED = IP_LIMIT - 100;
+const AUTH_TOP_UP = 200;
+const AUTH_ALLOWED_EXPECTED = 100;
 
 export const options = {
     scenarios: {
         anon_seed: {
             executor: 'shared-iterations',
-            vus: 5,
-            iterations: 95,
-            maxDuration: '20s',
+            vus: 50,
+            iterations: ANON_SEED,
+            maxDuration: '30s',
             exec: 'anonSeed',
             tags: { phase: 'anon_seed' },
         },
         auth_top_up: {
-            executor: 'shared-iterations',
-            vus: 1,
-            iterations: 15,
-            maxDuration: '20s',
-            startTime: '2s',
+            executor: 'constant-arrival-rate',
+            rate: 200,
+            timeUnit: '1s',
+            duration: '2s',
+            preAllocatedVUs: 30,
+            maxVUs: 50,
+            startTime: '5s',
             exec: 'authTopUp',
             tags: { phase: 'auth_top_up' },
         },
     },
     thresholds: {
         checks: ['rate>0.99'],
-        anon_allowed: ['count>=90'],
-        auth_allowed: ['count>=3', 'count<=7'],
-        auth_ip_blocked: ['count>=8'],
+        anon_allowed: [`count>=${ANON_SEED - 50}`],
+        auth_allowed: [
+            `count>=${AUTH_ALLOWED_EXPECTED - 20}`,
+            `count<=${AUTH_ALLOWED_EXPECTED + 20}`,
+        ],
+        auth_ip_blocked: [`count>=${AUTH_TOP_UP - AUTH_ALLOWED_EXPECTED - 30}`],
     },
 };
 
@@ -55,7 +60,7 @@ export function anonSeed() {
         'seed: anonymous status 200 or 429': (r) => r.status === 200 || r.status === 429,
     });
 
-    sleep(0.01);
+    sleep(0.001);
 }
 
 export function authTopUp() {
@@ -75,5 +80,5 @@ export function authTopUp() {
             r.status !== 429 || (r.body && r.body.includes('"type":"ip"')),
     });
 
-    sleep(0.05);
+    sleep(0.001);
 }

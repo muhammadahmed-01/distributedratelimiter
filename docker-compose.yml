@@ -18,6 +18,8 @@ services:
       - REDIS_HOST=redis
       - JWT_SIGNING_KEY=my-super-secret-signing-key-which-must-be-32-bytes!
       - SPRING_PROFILES_ACTIVE=dev
+      - RATELIMIT_IP_LIMIT=2000
+      - RATELIMIT_ACCOUNT_LIMIT=200
     depends_on:
       redis:
         condition: service_healthy

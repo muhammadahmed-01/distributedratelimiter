@@ -1,44 +1,47 @@
 /**
- * IP + JWT combination — IP limit applies before JWT/account.
- * Phase 1: exhaust IP quota with anonymous traffic.
- * Phase 2: valid JWT requests must still get 429 type=ip (not account).
- *
- * Run: k6 run -e JWT_SIGNING_KEY=... load-tests/ip_jwt_combo_test.js
+ * IP + JWT — exhaust IP quota, then prove valid JWT still gets 429 type=ip.
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
 import { BASE_URL, generateJWT } from './lib/jwt.js';
+import { IP_LIMIT, IP_OVERAGE } from './lib/limits.js';
 
 const ipExhaustAllowed = new Counter('ip_exhaust_allowed');
 const authBlockedByIp = new Counter('auth_blocked_by_ip');
 
 const TOKEN = generateJWT('acc-ip-jwt-combo');
+const AUTH_AFTER = Math.max(50, Math.floor(IP_OVERAGE * 0.5));
+const ALLOWED_MIN = IP_LIMIT - Math.floor(IP_OVERAGE * 0.1);
 
 export const options = {
     scenarios: {
         exhaust_ip_anonymous: {
-            executor: 'shared-iterations',
-            vus: 10,
-            iterations: 105,
-            maxDuration: '30s',
+            executor: 'constant-arrival-rate',
+            rate: 600,
+            timeUnit: '1s',
+            duration: '5s',
+            preAllocatedVUs: 80,
+            maxVUs: 120,
             exec: 'exhaustIp',
             tags: { phase: 'exhaust' },
         },
         auth_after_ip_exhaust: {
-            executor: 'shared-iterations',
-            vus: 1,
-            iterations: 5,
-            maxDuration: '15s',
-            startTime: '3s',
+            executor: 'constant-arrival-rate',
+            rate: 100,
+            timeUnit: '1s',
+            duration: '3s',
+            preAllocatedVUs: 20,
+            maxVUs: 30,
+            startTime: '6s',
             exec: 'authAfterExhaust',
             tags: { phase: 'auth_after_ip' },
         },
     },
     thresholds: {
         checks: ['rate==1.0'],
-        ip_exhaust_allowed: ['count>=95'],
-        auth_blocked_by_ip: ['count>=5'],
+        ip_exhaust_allowed: [`count>=${ALLOWED_MIN}`],
+        auth_blocked_by_ip: [`count>=${AUTH_AFTER}`],
     },
 };
 
@@ -53,7 +56,7 @@ export function exhaustIp() {
         'exhaust: status is 200 or 429': (r) => r.status === 200 || r.status === 429,
     });
 
-    sleep(0.01);
+    sleep(0.001);
 }
 
 export function authAfterExhaust() {
@@ -71,5 +74,5 @@ export function authAfterExhaust() {
             r.body && r.body.includes('"type":"ip"'),
     });
 
-    sleep(0.05);
+    sleep(0.01);
 }

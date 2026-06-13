@@ -36,3 +36,4 @@ build/
 data/
 prometheus.exe
 *.exe
+load-tests/k6-*.log

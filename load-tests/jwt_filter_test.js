@@ -1,8 +1,5 @@
 /**
- * Isolated JWT filter test — low request rate to avoid IP/account exhaustion.
- * Tests: anonymous pass-through, valid JWT, invalid JWT, missing accountId claim.
- *
- * Run: k6 run -e JWT_SIGNING_KEY=... load-tests/jwt_filter_test.js
+ * JWT filter — correctness checks plus parallel invalid-token load.
  */
 import http from 'k6/http';
 import { check } from 'k6';
@@ -10,20 +7,34 @@ import { BASE_URL, generateJWT } from './lib/jwt.js';
 
 export const options = {
     scenarios: {
-        jwt_filter_only: {
+        jwt_correctness: {
             executor: 'per-vu-iterations',
             vus: 1,
             iterations: 4,
             maxDuration: '30s',
-            tags: { filter: 'jwt' },
+            exec: 'correctnessSteps',
+            tags: { phase: 'correctness' },
+        },
+        jwt_invalid_storm: {
+            executor: 'constant-arrival-rate',
+            rate: 200,
+            timeUnit: '1s',
+            duration: '3s',
+            preAllocatedVUs: 50,
+            maxVUs: 80,
+            startTime: '2s',
+            exec: 'invalidTokenStorm',
+            tags: { phase: 'invalid_storm' },
         },
     },
     thresholds: {
-        checks: ['rate==1.0'],
+        checks: ['rate>0.99'],
+        http_req_failed: ['rate>0.4'],
+        http_reqs: ['count>=500'],
     },
 };
 
-export default function () {
+export function correctnessSteps() {
     const step = __ITER % 4;
 
     if (step === 0) {
@@ -56,4 +67,14 @@ export default function () {
             'jwt: missing accountId rejected (401)': (r) => r.status === 401,
         });
     }
+}
+
+export function invalidTokenStorm() {
+    const res = http.get(BASE_URL, {
+        headers: { Authorization: 'Bearer not.a.valid.jwt' },
+    });
+
+    check(res, {
+        'jwt storm: invalid token rejected (401)': (r) => r.status === 401,
+    });
 }

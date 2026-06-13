@@ -13,288 +13,298 @@
   },
   "editable": true,
   "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "id": 1,
   "links": [],
   "liveNow": false,
   "panels": [
     {
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "id": 10,
+      "options": {
+        "code": { "language": "markdown", "showLineNumbers": false },
+        "content": "**Read totals, not rate peaks.** k6 runs 8 sequential bursts (~110s). Set range to **Last 15 minutes** and use the **Totals** bargauges — they should match k6 counters (e.g. ~77k requests/run). Rate panels show req/s per minute bucket; brief bursts smear and layers spike at different times.",
+        "mode": "markdown"
+      },
+      "title": "k6 test guide",
+      "type": "text"
+    },
+    {
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
+          "color": { "mode": "palette-classic" },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 3 },
+      "id": 4,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "valueMode": "color"
       },
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(rate_limit_requests_total{status=\"allowed\"}[1m])",
+          "expr": "sum by (type) (increase(rate_limit_requests_total{status=\"allowed\"}[$__range]))",
           "legendFormat": "Allowed - {{type}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Allowed Requests (req/sec)",
-      "type": "timeseries"
+      "title": "Totals — Allowed (selected range)",
+      "type": "bargauge"
     },
     {
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
+          "color": { "mode": "palette-classic" },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }] }
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 0
-      },
-      "id": 2,
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 3 },
+      "id": 5,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "valueMode": "color"
       },
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(rate_limit_requests_total{status=\"blocked\"}[1m])",
-          "legendFormat": "Blocked 429 - {{type}}",
+          "expr": "sum by (type, status) (increase(rate_limit_requests_total{status=~\"blocked|invalid\"}[$__range]))",
+          "legendFormat": "{{status}} - {{type}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Totals — Blocked / Invalid (selected range)",
+      "type": "bargauge"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "req/s",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "id": 1,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "rate(rate_limit_requests_total{status=\"allowed\",type=\"ip\"}[1m])",
+          "legendFormat": "Allowed - ip",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "rate(rate_limit_requests_total{status=\"invalid\"}[1m])",
-          "hide": false,
-          "legendFormat": "Invalid 401 - {{type}}",
+          "expr": "rate(rate_limit_requests_total{status=\"blocked\",type=\"ip\"}[1m])",
+          "legendFormat": "Blocked 429 - ip",
           "range": true,
           "refId": "B"
         }
       ],
-      "title": "Blocked/Invalid Requests (req/sec)",
+      "title": "IP filter rate (req/sec)",
       "type": "timeseries"
     },
     {
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "req/s",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" }
           },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "id": 6,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "rate(rate_limit_requests_total{status=\"allowed\",type=\"account\"}[1m])",
+          "legendFormat": "Allowed - account",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "rate(rate_limit_requests_total{status=\"blocked\",type=\"account\"}[1m])",
+          "legendFormat": "Blocked 429 - account",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "rate(rate_limit_requests_total{status=\"invalid\",type=\"jwt\"}[1m])",
+          "legendFormat": "Invalid 401 - jwt",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Account + JWT filter rate (req/sec)",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
             "showPoints": "auto",
             "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "stacking": { "group": "A", "mode": "none" }
           },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 9
-      },
-      "id": 3,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "id": 7,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(rate_limit_redis_latency_seconds_bucket[1m])) by (le, type))",
-          "legendFormat": "p95 Redis latency - {{type}}",
+          "expr": "increase(rate_limit_redis_latency_seconds_sum[$__range]) / increase(rate_limit_redis_latency_seconds_count[$__range])",
+          "legendFormat": "Avg Redis latency - {{type}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Redis Lua Script Latency (p95)",
+      "title": "Redis Lua Script Latency (avg over range)",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "id": 3,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(increase(rate_limit_redis_latency_seconds_bucket[$__range])) by (le, type))",
+          "legendFormat": "p95 (range) - {{type}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "rate_limit_redis_latency_seconds{quantile=\"0.95\"}",
+          "legendFormat": "p95 (micrometer) - {{type}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "max_over_time(rate_limit_redis_latency_seconds_max[$__range])",
+          "legendFormat": "max - {{type}}",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Redis Lua Script Latency (p95 / max)",
       "type": "timeseries"
     }
   ],
   "schemaVersion": 38,
   "style": "dark",
-  "tags": [],
-  "templating": {
-    "list": []
-  },
-  "time": {
-    "from": "now-5m",
-    "to": "now"
-  },
+  "tags": ["rate-limiter", "k6"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
   "timepicker": {},
   "timezone": "",
   "title": "Distributed Rate Limiter",
-  "uid": "rate-limiter-1",
-  "version": 1
+  "uid": "rate-limiter-v2",
+  "version": 3
 }

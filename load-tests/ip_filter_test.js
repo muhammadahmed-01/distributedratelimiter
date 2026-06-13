@@ -1,31 +1,36 @@
 /**
- * Isolated IP filter test — anonymous requests only (no JWT).
- * Expect: first 100 requests/min allowed, then 429 with type=ip.
- *
- * Run: k6 run -e JWT_SIGNING_KEY=... load-tests/ip_filter_test.js
+ * Isolated IP filter test — high-volume anonymous burst.
+ * Expect: first IP_LIMIT requests/min allowed, then 429 type=ip.
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
 import { BASE_URL } from './lib/jwt.js';
+import { IP_LIMIT, IP_OVERAGE } from './lib/limits.js';
 
 const ipAllowed = new Counter('ip_allowed');
 const ipBlocked = new Counter('ip_blocked');
 
+const BLOCKED_MIN = Math.floor(IP_OVERAGE * 0.5);
+const ALLOWED_MIN = IP_LIMIT - Math.floor(IP_OVERAGE * 0.1);
+
 export const options = {
     scenarios: {
-        ip_filter_only: {
-            executor: 'shared-iterations',
-            vus: 10,
-            iterations: 110,
-            maxDuration: '30s',
+        ip_filter_burst: {
+            executor: 'constant-arrival-rate',
+            rate: 800,
+            timeUnit: '1s',
+            duration: '6s',
+            preAllocatedVUs: 100,
+            maxVUs: 150,
             tags: { filter: 'ip' },
         },
     },
     thresholds: {
         checks: ['rate>0.99'],
-        ip_allowed: ['count>=95'],
-        ip_blocked: ['count>=5'],
+        ip_allowed: [`count>=${ALLOWED_MIN}`],
+        ip_blocked: [`count>=${BLOCKED_MIN}`],
+        http_reqs: ['count>=3000'],
     },
 };
 
@@ -47,5 +52,5 @@ export default function () {
             r.status !== 429 || (r.body && r.body.includes('"type":"ip"')),
     });
 
-    sleep(0.01);
+    sleep(0.001);
 }

@@ -217,3 +217,9 @@ Use **Totals** panels (`increase(...[$__range])`) to validate against k6, not pe
 ## License
 
 [MIT](LICENSE). Copyright (c) 2026 Muhammad Ahmed
+
+---
+
+## Proposal hook
+
+"Built and load-tested Redis-backed rate limiter; 8/8 k6 profiles, ~77k requests. Run `docker compose --profile full up --build` and compare Grafana Totals to README: https://github.com/muhammadahmed-01/DistributedRateLimiter"

@@ -20,10 +20,10 @@ Measured on 2026-06-13 against the Docker full stack (IP **2000**/min, account *
 | Full-pipeline burst | **~60,900** requests; **400** allowed; **58,763** IP + **1,600** account blocks | Same (profile 8) |
 | Peak IP block rate | **~1,100 req/s** observed during 3,000 req/s race phase | Same (Grafana alignment) |
 | Prometheus totals (one suite) | IP **~13,200** allowed / **~64,500** blocked; account **~2,200** / **~2,360**; JWT invalid **~602** | Same |
-| Observability | Grafana **Totals** panels match k6 counters (±1%) | [docs/grafana-dashboard.png](docs/grafana-dashboard.png) |
+| Observability | Grafana **Totals** panels match k6 counters (±1%) | [docs/images/grafana-dashboard.png](docs/images/grafana-dashboard.png) |
 | CI | Unit, integration, and Testcontainers tests on every push | GitHub Actions |
 
-![Grafana totals after k6 suite: counters align with Prometheus and k6](docs/grafana-dashboard.png)
+![Grafana totals after k6 suite: counters align with Prometheus and k6](docs/images/grafana-dashboard.png)
 
 ---
 
@@ -94,8 +94,9 @@ These are the failure modes worth deciding upfront before shipping a Redis-backe
 | k6 measured results (all profiles) | [load-tests/K6_RESULTS.md](load-tests/K6_RESULTS.md) |
 | Design trade-offs and scale paths | [Design.md](Design.md) |
 | Portfolio preview (HTML) | [docs/portfolio-preview.html](docs/portfolio-preview.html) |
-| Rate-limit investigation checklist | [docs/FIRST-DAY-RATE-LIMIT-CHECKLIST.md](docs/FIRST-DAY-RATE-LIMIT-CHECKLIST.md) |
-| Grafana screenshot | [docs/grafana-dashboard.png](docs/grafana-dashboard.png) |
+| Rate-limit audit checklist | [docs/RATE-LIMIT-AUDIT-CHECKLIST.md](docs/RATE-LIMIT-AUDIT-CHECKLIST.md) |
+| Phase 1 rate-limit SOW | [docs/PHASE-1-RATE-LIMIT-SOW.md](docs/PHASE-1-RATE-LIMIT-SOW.md) |
+| Grafana screenshot | [docs/images/grafana-dashboard.png](docs/images/grafana-dashboard.png) |
 | Upwork blurb | [UPWORK-BLURB.md](UPWORK-BLURB.md) |
 | Portfolio assets | [PORTFOLIO-ASSETS.md](PORTFOLIO-ASSETS.md) |
 

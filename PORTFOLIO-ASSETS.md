@@ -27,8 +27,8 @@ This portfolio piece documents a Spring Boot + Redis sliding-window limiter with
 | Order | File | Caption for Upwork |
 |-------|------|-------------------|
 | 1 | `docs/images/grafana-dashboard.png` | Grafana Totals after k6 suite: IP/account allowed vs blocked align with k6 counters (±1%) |
-| 2 | `docs/portfolio-preview.html` (browser screenshot) | Summary: 8/8 k6 PASS, ~77k requests, tiered filter chain |
-| 3 | `load-tests/K6_RESULTS.md` (rendered summary table) | Eight-profile breakdown: isolated filters through 3k req/s full pipeline |
+| 2 | `load-tests/K6_RESULTS.md` (rendered summary table) | Summary: 8/8 k6 PASS, ~77k requests, tiered filter chain |
+| 3 | README results table (browser screenshot) | Eight-profile breakdown: isolated filters through 3k req/s full pipeline |
 
 ---
 
@@ -58,4 +58,4 @@ Reproducible in Docker. Link in comments.
 | `load-tests/K6_RESULTS.md` | Measured k6 evidence |
 | `Design.md` | Architecture interview prep |
 | `docs/RATE-LIMIT-AUDIT-CHECKLIST.md` | Discovery call process |
-| `docs/portfolio-preview.html` | Single-page visual for screenshots |
+| `docs/images/grafana-dashboard.png` | Primary Upwork screenshot |

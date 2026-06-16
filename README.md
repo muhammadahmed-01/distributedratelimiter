@@ -93,7 +93,6 @@ These are the failure modes worth deciding upfront before shipping a Redis-backe
 |----------|------|
 | k6 measured results (all profiles) | [load-tests/K6_RESULTS.md](load-tests/K6_RESULTS.md) |
 | Design trade-offs and scale paths | [Design.md](Design.md) |
-| Portfolio preview (HTML) | [docs/portfolio-preview.html](docs/portfolio-preview.html) |
 | Rate-limit audit checklist | [docs/RATE-LIMIT-AUDIT-CHECKLIST.md](docs/RATE-LIMIT-AUDIT-CHECKLIST.md) |
 | Phase 1 rate-limit SOW | [docs/PHASE-1-RATE-LIMIT-SOW.md](docs/PHASE-1-RATE-LIMIT-SOW.md) |
 | Grafana screenshot | [docs/images/grafana-dashboard.png](docs/images/grafana-dashboard.png) |

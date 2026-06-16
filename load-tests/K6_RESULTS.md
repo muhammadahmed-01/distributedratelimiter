@@ -1,6 +1,6 @@
 # k6 Load Test Results
 
-**This is the evidence behind the README claims.** Every profile below was run against the live Docker stack — not mocked Redis, not unit-test stubs. If you're evaluating this project, start here: numbers you can reproduce in under two minutes with `.\load-tests\run-all-tests.ps1`.
+**This is the evidence behind the README claims.** Every profile below was run against the live Docker stack, not mocked Redis or unit-test stubs. If you're evaluating this project, start here: numbers you can reproduce in under two minutes with `.\load-tests\run-all-tests.ps1`.
 
 Verified run of all k6 profiles against the Docker full stack (scaled limits).
 
@@ -13,7 +13,7 @@ Verified run of all k6 profiles against the Docker full stack (scaled limits).
 | **Runner** | `.\load-tests\run-all-tests.ps1` (Redis `FLUSHALL` between each script) |
 | **Suite duration** | ~98 s |
 | **Overall verdict** | **8/8 PASS** |
-| **Grafana screenshot** | [docs/grafana-dashboard.png](../docs/grafana-dashboard.png) |
+| **Grafana screenshot** | [docs/images/grafana-dashboard.png](../docs/images/grafana-dashboard.png) |
 
 ---
 
@@ -247,11 +247,11 @@ k6 run -e JWT_SIGNING_KEY=my-super-secret-signing-key-which-must-be-32-bytes! lo
 
 ## Grafana alignment
 
-![Grafana totals after k6 suite](../docs/grafana-dashboard.png)
+![Grafana totals after k6 suite](../docs/images/grafana-dashboard.png)
 
 Dashboard: **Distributed Rate Limiter** (`rate-limiter-v2`) at http://localhost:3001
 
-The app emits all filter metrics to Prometheus. Use **Totals** bargauges (`increase(...[$__range])`) — not rate peaks — to validate against k6.
+The app emits all filter metrics to Prometheus. Use **Totals** bargauges (`increase(...[$__range])`), not rate peaks, to validate against k6.
 
 | Prometheus counter (one suite) | Expected |
 |-------------------------------|----------|
